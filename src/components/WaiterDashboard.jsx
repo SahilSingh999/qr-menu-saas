@@ -15,9 +15,16 @@ export default function WaiterDashboard() {
     fetchStaff
   } = useSupabase();
 
-  const { formatPrice } = useCurrency();
+  const { formatPrice, setCurrencyCode } = useCurrency();
   const [cafes, setCafes] = useState([]);
   const [selectedCafe, setSelectedCafe] = useState(null);
+
+  // Sync currency with selected cafe changes
+  useEffect(() => {
+    if (selectedCafe?.currency) {
+      setCurrencyCode(selectedCafe.currency);
+    }
+  }, [selectedCafe]);
   const [orders, setOrders] = useState([]);
   const [statusFilter, setStatusFilter] = useState('active');
   const [isAudioMuted, setIsAudioMuted] = useState(false);

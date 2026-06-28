@@ -250,6 +250,24 @@ export default function AdminPanel() {
     localStorage.removeItem('admin_session_cafe_id');
   };
 
+  const handleCurrencyChange = async (code) => {
+    setCurrencyCode(code);
+    if (selectedCafe) {
+      const updated = await updateCafe(selectedCafe.id, { currency: code });
+      if (updated) {
+        setCafes(prev => prev.map(c => c.id === selectedCafe.id ? updated : c));
+        setSelectedCafe(updated);
+      }
+    }
+  };
+
+  // Sync currency with selected cafe changes
+  useEffect(() => {
+    if (selectedCafe?.currency) {
+      setCurrencyCode(selectedCafe.currency);
+    }
+  }, [selectedCafe]);
+
   const handleCreateStaff = async (e) => {
     e.preventDefault();
     if (!staffName.trim() || staffPin.length !== 4) {
@@ -1255,7 +1273,7 @@ export default function AdminPanel() {
                             key={c.code}
                             type="button"
                             className={`currency-btn ${currencyCode === c.code ? 'active' : ''}`}
-                            onClick={() => setCurrencyCode(c.code)}
+                            onClick={() => handleCurrencyChange(c.code)}
                             title={`Set prices in ${c.label}`}
                             aria-pressed={currencyCode === c.code}
                           >

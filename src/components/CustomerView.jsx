@@ -565,7 +565,7 @@ export default function CustomerView() {
     updateOrder
   } = useSupabase();
 
-  const { formatPrice } = useCurrency();
+  const { formatPrice, setCurrencyCode } = useCurrency();
 
   // State
   const [cafe, setCafe] = useState(null);
@@ -747,6 +747,9 @@ export default function CustomerView() {
           foundCafe = cafesList[0];
         }
         setCafe(foundCafe);
+        if (foundCafe?.currency) {
+          setCurrencyCode(foundCafe.currency);
+        }
         loadMenuItems(foundCafe.id);
       } else {
         setError('No cafes found. Please create a cafe in the Admin Panel first.');
