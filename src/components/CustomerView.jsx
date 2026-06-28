@@ -714,6 +714,28 @@ export default function CustomerView() {
     }
   }, [placedOrder, cafeId, tableId]);
 
+  // Polling fallback to ensure status is updated even if socket connection drops on mobile device wakeups
+  useEffect(() => {
+    if (!placedOrder?.id) return;
+    const interval = setInterval(async () => {
+      try {
+        const { data, error } = await supabase
+          .from('orders')
+          .select('*')
+          .eq('id', placedOrder.id)
+          .single();
+        if (data && !error) {
+          setOrderTracking(data);
+          localStorage.setItem(`placed_order_cafe_${cafeId}_table_${tableId}`, JSON.stringify(data));
+        }
+      } catch (err) {
+        console.warn('Silent polling error:', err);
+      }
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [placedOrder, cafeId, tableId]);
+
   const loadCafeDetails = async (id) => {
     try {
       setError(null);
