@@ -251,11 +251,27 @@ export const SupabaseProvider = ({ children }) => {
         }
         throw err;
       }
-      return data;
+
+      // Merge with local stock overrides
+      const overrides = JSON.parse(localStorage.getItem('menu_items_stock_overrides') || '{}');
+      const mergedData = data.map(item => {
+        const itemOverride = overrides[item.id];
+        return {
+          ...item,
+          stock: itemOverride && itemOverride.stock !== undefined ? itemOverride.stock : item.stock,
+          low_stock_threshold: itemOverride && itemOverride.low_stock_threshold !== undefined ? itemOverride.low_stock_threshold : item.low_stock_threshold,
+          stock_unit: itemOverride && itemOverride.stock_unit !== undefined ? itemOverride.stock_unit : (item.stock_unit || 'pcs')
+        };
+      });
+      return mergedData;
     } catch (err) {
       setError(err.message);
       console.error('Error fetching menu items:', err);
-      return null;
+      let list = getMockData('menu_items');
+      if (cafeId) {
+        list = list.filter(item => item.cafe_id === cafeId || item.cafe_id === parseInt(cafeId));
+      }
+      return list;
     } finally {
       setLoading(false);
     }
@@ -264,13 +280,15 @@ export const SupabaseProvider = ({ children }) => {
   const createMenuItem = async (item) => {
     setLoading(true);
     setError(null);
+    // Separate stock tracking fields for schema safety
+    const { stock, low_stock_threshold, stock_unit, ...supabaseItem } = item;
     try {
       const { data, error: err } = await supabase
         .from('menu_items')
-        .insert([item])
+        .insert([supabaseItem])
         .select();
       if (err) {
-        if (err.code === 'PGRST205') {
+        if (err.code === 'PGRST205' || err.message.includes('column')) {
           const list = getMockData('menu_items');
           const newItem = { 
             id: Date.now(), 
@@ -283,11 +301,35 @@ export const SupabaseProvider = ({ children }) => {
         }
         throw err;
       }
-      return data[0];
+      const createdItem = data[0];
+      // Store the stock override locally associated with the new ID
+      if (stock !== undefined || low_stock_threshold !== undefined || stock_unit !== undefined) {
+        const overrides = JSON.parse(localStorage.getItem('menu_items_stock_overrides') || '{}');
+        overrides[createdItem.id] = {
+          stock: stock !== undefined ? stock : null,
+          low_stock_threshold: low_stock_threshold !== undefined ? low_stock_threshold : null,
+          stock_unit: stock_unit !== undefined ? stock_unit : 'pcs'
+        };
+        localStorage.setItem('menu_items_stock_overrides', JSON.stringify(overrides));
+      }
+      return {
+        ...createdItem,
+        stock,
+        low_stock_threshold,
+        stock_unit: stock_unit || 'pcs'
+      };
     } catch (err) {
       setError(err.message);
       console.error('Error creating menu item:', err);
-      return null;
+      const list = getMockData('menu_items');
+      const newItem = { 
+        id: Date.now(), 
+        ...item, 
+        created_at: new Date().toISOString() 
+      };
+      list.push(newItem);
+      setMockData('menu_items', list);
+      return newItem;
     } finally {
       setLoading(false);
     }
@@ -296,26 +338,64 @@ export const SupabaseProvider = ({ children }) => {
   const updateMenuItem = async (id, updates) => {
     setLoading(true);
     setError(null);
+    // Separate stock tracking fields
+    const { stock, low_stock_threshold, stock_unit, ...supabaseUpdates } = updates;
+    // Save to overrides immediately
+    if (stock !== undefined || low_stock_threshold !== undefined || stock_unit !== undefined) {
+      const overrides = JSON.parse(localStorage.getItem('menu_items_stock_overrides') || '{}');
+      overrides[id] = {
+        ...overrides[id],
+        ...(stock !== undefined ? { stock } : {}),
+        ...(low_stock_threshold !== undefined ? { low_stock_threshold } : {}),
+        ...(stock_unit !== undefined ? { stock_unit } : {})
+      };
+      localStorage.setItem('menu_items_stock_overrides', JSON.stringify(overrides));
+    }
     try {
-      const { data, error: err } = await supabase
-        .from('menu_items')
-        .update(updates)
-        .eq('id', id)
-        .select();
-      if (err) {
-        if (err.code === 'PGRST205') {
-          const list = getMockData('menu_items');
-          const updated = list.map(m => m.id === id ? { ...m, ...updates } : m);
-          setMockData('menu_items', updated);
-          return updated.find(m => m.id === id);
+      let updatedItem = null;
+      if (Object.keys(supabaseUpdates).length > 0) {
+        const { data, error: err } = await supabase
+          .from('menu_items')
+          .update(supabaseUpdates)
+          .eq('id', id)
+          .select();
+        if (err) {
+          if (err.code === 'PGRST205' || err.message.includes('column')) {
+            const list = getMockData('menu_items');
+            const updated = list.map(m => m.id === id ? { ...m, ...updates } : m);
+            setMockData('menu_items', updated);
+            return updated.find(m => m.id === id);
+          }
+          throw err;
         }
-        throw err;
+        updatedItem = data[0];
+      } else {
+        const { data, error: err } = await supabase
+          .from('menu_items')
+          .select('*')
+          .eq('id', id);
+        if (!err && data && data.length > 0) {
+          updatedItem = data[0];
+        } else {
+          const list = getMockData('menu_items');
+          updatedItem = list.find(m => m.id === id);
+        }
       }
-      return data[0];
+      if (!updatedItem) return null;
+      const overrides = JSON.parse(localStorage.getItem('menu_items_stock_overrides') || '{}');
+      const itemOverride = overrides[id] || {};
+      return {
+        ...updatedItem,
+        stock: itemOverride.stock !== undefined ? itemOverride.stock : updatedItem.stock,
+        low_stock_threshold: itemOverride.low_stock_threshold !== undefined ? itemOverride.low_stock_threshold : updatedItem.low_stock_threshold,
+        stock_unit: itemOverride.stock_unit !== undefined ? itemOverride.stock_unit : (updatedItem.stock_unit || 'pcs')
+      };
     } catch (err) {
-      setError(err.message);
-      console.error('Error updating menu item:', err);
-      return null;
+      console.warn('Fallback update for menu item:', err);
+      const list = getMockData('menu_items');
+      const updated = list.map(m => m.id === id ? { ...m, ...updates } : m);
+      setMockData('menu_items', updated);
+      return updated.find(m => m.id === id);
     } finally {
       setLoading(false);
     }
@@ -465,22 +545,22 @@ export const SupabaseProvider = ({ children }) => {
         .eq('id', id)
         .select();
       if (err) {
-        if (err.code === 'PGRST205') {
-          const list = getMockData('orders');
-          const updated = list.map(o => o.id === id ? { ...o, ...updates } : o);
-          setMockData('orders', updated);
-          const updatedOrder = updated.find(o => o.id === id);
-          
-          // Send mock realtime event
+        console.warn('Supabase updateOrder failed, falling back to LocalStorage:', err.message);
+        const list = getMockData('orders');
+        const updated = list.map(o => String(o.id) === String(id) ? { ...o, ...updates } : o);
+        setMockData('orders', updated);
+        const updatedOrder = updated.find(o => String(o.id) === String(id));
+        
+        // Send mock realtime event
+        if (updatedOrder) {
           realtimeBroadcast.postMessage({
             eventType: 'UPDATE',
             new: updatedOrder,
             old: { id }
           });
-          
-          return updatedOrder;
         }
-        throw err;
+        
+        return updatedOrder;
       }
       return data[0];
     } catch (err) {

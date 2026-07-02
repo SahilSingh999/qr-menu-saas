@@ -293,13 +293,296 @@ const MemoryMatch = ({ themeColor }) => {
   );
 };
 
+// Canvas-based Block Tower Stacking Game
+const TowerBuilder = ({ themeColor }) => {
+  const canvasRef = useRef(null);
+  const [score, setScore] = useState(0);
+  const [gameOver, setGameOver] = useState(false);
+  const [highScore, setHighScore] = useState(
+    parseInt(localStorage.getItem('tower_highscore') || '0')
+  );
+
+  const canvasWidth = 300;
+  const canvasHeight = 350;
+  
+  // Game states in refs to keep loop synchronized
+  const blocksRef = useRef([]); // Array of { y, x, width, color }
+  const currentBlockRef = useRef({ x: 0, width: 150, speed: 2.5, dir: 1, y: 0 });
+  const cameraYRef = useRef(0); // Offset for vertical scroll
+  const activeCameraYRef = useRef(0); // Smooth scroll interpolation
+
+  const initGame = () => {
+    // Ground block
+    blocksRef.current = [
+      { y: canvasHeight - 30, x: (canvasWidth - 150) / 2, width: 150, color: themeColor || '#00f2fe' }
+    ];
+    currentBlockRef.current = {
+      x: 0,
+      width: 150,
+      speed: 2.5,
+      dir: 1,
+      y: canvasHeight - 60
+    };
+    cameraYRef.current = 0;
+    activeCameraYRef.current = 0;
+    setScore(0);
+    setGameOver(false);
+  };
+
+  const dropBlock = () => {
+    if (gameOver) return;
+    const blocks = blocksRef.current;
+    const currentBlock = currentBlockRef.current;
+    const targetBlock = blocks[blocks.length - 1];
+
+    // Align check
+    const diff = currentBlock.x - targetBlock.x;
+    
+    // Perfect alignment helper
+    let alignedX = currentBlock.x;
+    let alignedWidth = currentBlock.width - Math.abs(diff);
+
+    // If within 5 pixels, snap for a PERFECT drop!
+    if (Math.abs(diff) < 5) {
+      alignedX = targetBlock.x;
+      alignedWidth = currentBlock.width;
+      // Triggers perfect alignment animation (highlight)
+    }
+
+    if (alignedWidth <= 0) {
+      setGameOver(true);
+      return;
+    }
+
+    // Add block to stack
+    const newBlockColor = `hsl(${(blocks.length * 20) % 360}, 85%, 60%)`;
+    const placedBlock = {
+      y: currentBlock.y,
+      x: alignedX,
+      width: alignedWidth,
+      color: newBlockColor
+    };
+    blocks.push(placedBlock);
+
+    setScore(blocks.length - 1);
+    if (blocks.length - 1 > highScore) {
+      setHighScore(blocks.length - 1);
+      localStorage.setItem('tower_highscore', (blocks.length - 1).toString());
+    }
+
+    // Adjust camera if tower is high
+    const targetCamY = Math.max(0, (canvasHeight - 30) - placedBlock.y - canvasHeight / 2);
+    cameraYRef.current = targetCamY;
+
+    // Spawn new block
+    const nextY = currentBlock.y - 30;
+    const nextSpeed = Math.min(7.0, 2.5 + (blocks.length * 0.15)); // speed increases slightly
+    currentBlockRef.current = {
+      x: Math.random() * (canvasWidth - alignedWidth),
+      width: alignedWidth,
+      speed: nextSpeed,
+      dir: Math.random() > 0.5 ? 1 : -1,
+      y: nextY
+    };
+  };
+
+  useEffect(() => {
+    initGame();
+  }, []);
+
+  useEffect(() => {
+    let animationFrameId;
+
+    const gameLoop = () => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+
+      // Clear canvas
+      ctx.fillStyle = '#0f1424';
+      ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+      // Smooth camera scroll transition
+      activeCameraYRef.current += (cameraYRef.current - activeCameraYRef.current) * 0.1;
+
+      // Draw background grid lines for aesthetic
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.02)';
+      ctx.lineWidth = 1;
+      for (let i = 0; i < canvasWidth; i += 20) {
+        ctx.beginPath();
+        ctx.moveTo(i, 0);
+        ctx.lineTo(i, canvasHeight);
+        ctx.stroke();
+      }
+      for (let i = 0; i < canvasHeight; i += 20) {
+        ctx.beginPath();
+        ctx.moveTo(0, i);
+        ctx.lineTo(canvasWidth, i);
+        ctx.stroke();
+      }
+
+      // Apply camera transform
+      ctx.save();
+      ctx.translate(0, activeCameraYRef.current);
+
+      // Draw stacked blocks
+      blocksRef.current.forEach((block, index) => {
+        // Draw main block
+        ctx.fillStyle = block.color;
+        ctx.shadowColor = block.color;
+        ctx.shadowBlur = index === blocksRef.current.length - 1 ? 12 : 3;
+        
+        // Rounded block design
+        const r = 4; // corner radius
+        ctx.beginPath();
+        ctx.roundRect(block.x, block.y, block.width, 28, r);
+        ctx.fill();
+
+        // Overlay shine highlight
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+        ctx.fillRect(block.x, block.y, block.width, 8);
+
+        // Border
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      });
+
+      // Update and draw current moving block
+      if (!gameOver) {
+        const cur = currentBlockRef.current;
+        cur.x += cur.speed * cur.dir;
+
+        // Bounce off walls
+        if (cur.x <= 0) {
+          cur.x = 0;
+          cur.dir = 1;
+        } else if (cur.x + cur.width >= canvasWidth) {
+          cur.x = canvasWidth - cur.width;
+          cur.dir = -1;
+        }
+
+        ctx.fillStyle = '#ffffff';
+        ctx.shadowColor = '#ffffff';
+        ctx.shadowBlur = 15;
+        
+        ctx.beginPath();
+        ctx.roundRect(cur.x, cur.y, cur.width, 28, 4);
+        ctx.fill();
+
+        // Shading
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+        ctx.fillRect(cur.x, cur.y + 20, cur.width, 8);
+
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.stroke();
+      }
+
+      ctx.restore();
+      ctx.shadowBlur = 0;
+
+      if (!gameOver) {
+        animationFrameId = requestAnimationFrame(gameLoop);
+      }
+    };
+
+    if (!gameOver) {
+      animationFrameId = requestAnimationFrame(gameLoop);
+    } else {
+      // Draw static final frame
+      const canvas = canvasRef.current;
+      if (canvas) {
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#0f1424';
+        ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+        ctx.save();
+        ctx.translate(0, activeCameraYRef.current);
+        blocksRef.current.forEach(block => {
+          ctx.fillStyle = block.color;
+          ctx.beginPath();
+          ctx.roundRect(block.x, block.y, block.width, 28, 4);
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+          ctx.stroke();
+        });
+        ctx.restore();
+      }
+    }
+
+    return () => cancelAnimationFrame(animationFrameId);
+  }, [gameOver]);
+
+  // Handle click on canvas or screen
+  const handleCanvasClick = (e) => {
+    e.preventDefault();
+    dropBlock();
+  };
+
+  // Keyboard Space Bar trigger
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === ' ' || e.code === 'Space') {
+        e.preventDefault();
+        dropBlock();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [gameOver]);
+
+  return (
+    <div className="tower-game-container">
+      <div className="game-hud">
+        <div className="hud-metric">SCORE: <span className="value">{score}</span></div>
+        <div className="hud-metric">BEST: <span className="value">{highScore}</span></div>
+      </div>
+
+      <div className="canvas-wrapper">
+        <canvas 
+          ref={canvasRef} 
+          width={canvasWidth} 
+          height={canvasHeight} 
+          className="tower-canvas"
+          onClick={handleCanvasClick}
+        ></canvas>
+        {gameOver && (
+          <div className="game-overlay">
+            <h3>TOWER TOPPLED!</h3>
+            <p className="final-score">Blocks Stacked: {score}</p>
+            <button className="btn-primary" onClick={initGame}>🔄 Play Again</button>
+          </div>
+        )}
+      </div>
+
+      <div className="game-controls">
+        <button 
+          className="btn-drop-block" 
+          onClick={dropBlock} 
+          disabled={gameOver} 
+          style={{ background: themeColor || '#00f2fe', color: '#0b0f19', fontWeight: 'bold' }}
+        >
+          🏗️ Drop Block (or Tap Screen)
+        </button>
+      </div>
+      <p className="controls-tip">Tap the canvas/button or press Space to stack blocks!</p>
+    </div>
+  );
+};
+
 // Combined Game Suite Wrapper (Solo Mode)
 const GameSuite = ({ themeColor }) => {
-  const [selectedGame, setSelectedGame] = useState('snake');
+  const [selectedGame, setSelectedGame] = useState('tower'); // Default to the exciting new Tower Builder!
 
   return (
     <div className="game-suite-container glass-card">
       <div className="game-suite-tabs">
+        <button 
+          className={`suite-tab-btn ${selectedGame === 'tower' ? 'active' : ''}`}
+          onClick={() => setSelectedGame('tower')}
+          style={{ '--btn-accent-color': themeColor }}
+        >
+          🏗️ Tower Stack
+        </button>
         <button 
           className={`suite-tab-btn ${selectedGame === 'snake' ? 'active' : ''}`}
           onClick={() => setSelectedGame('snake')}
@@ -317,7 +600,9 @@ const GameSuite = ({ themeColor }) => {
       </div>
 
       <div className="game-suite-body">
-        {selectedGame === 'snake' ? (
+        {selectedGame === 'tower' ? (
+          <TowerBuilder themeColor={themeColor} />
+        ) : selectedGame === 'snake' ? (
           <SnakeGame themeColor={themeColor} />
         ) : (
           <MemoryMatch themeColor={themeColor} />
@@ -562,7 +847,8 @@ export default function CustomerView() {
     fetchMenuItems,
     createOrder,
     uploadImage,
-    updateOrder
+    updateOrder,
+    updateMenuItem
   } = useSupabase();
 
   const { formatPrice, setCurrencyCode } = useCurrency();
@@ -576,11 +862,17 @@ export default function CustomerView() {
   const [orderTracking, setOrderTracking] = useState(null);
   const [selectedPortions, setSelectedPortions] = useState({});
 
-  // Toast notification state (replaces browser alert — iOS-safe)
+  const toastTimeoutRef = useRef(null);
   const [toast, setToast] = useState(null);
-  const showToast = (msg, type = 'info') => {
+  const showToast = (msg, type = 'info', duration = 1500) => {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+    }
     setToast({ msg, type });
-    setTimeout(() => setToast(null), 3500);
+    toastTimeoutRef.current = setTimeout(() => {
+      setToast(null);
+      toastTimeoutRef.current = null;
+    }, duration);
   };
 
   // Cancel confirmation state (mobile-safe, inline)
@@ -604,6 +896,8 @@ export default function CustomerView() {
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [voucherInput, setVoucherInput] = useState('');
   const [voucherDiscount, setVoucherDiscount] = useState(0);
+  const [showFullCartDrawer, setShowFullCartDrawer] = useState(false);
+  const [showMenuCatalogDuringTracking, setShowMenuCatalogDuringTracking] = useState(false);
 
   const handleApplyVoucher = () => {
     if (voucherInput.trim().toUpperCase() === 'YUMMYDINE20') {
@@ -781,6 +1075,21 @@ export default function CustomerView() {
     const selectedPortion = selectedPortions[item.id] || null;
     const cartItemId = selectedPortion ? `${item.id}-${selectedPortion}` : `${item.id}`;
 
+    const existingInCart = cart.find(i => i.cartItemId === cartItemId);
+    const currentQty = existingInCart ? existingInCart.quantity : 0;
+
+    if (item.stock !== undefined && item.stock !== null) {
+      const stockNum = Number(item.stock);
+      if (stockNum <= 0) {
+        showToast(`❌ ${item.name} is currently out of stock.`, 'error');
+        return;
+      }
+      if (currentQty + 1 > stockNum) {
+        showToast(`❌ Cannot add more. Only ${stockNum} ${item.stock_unit || 'pcs'} available in stock.`, 'error');
+        return;
+      }
+    }
+
     setCart(prev => {
       const existing = prev.find(i => i.cartItemId === cartItemId);
       if (existing) {
@@ -788,13 +1097,23 @@ export default function CustomerView() {
       }
       return [...prev, { cartItemId, item, portion: selectedPortion, quantity: 1 }];
     });
-    showToast(`✅ ${item.name} added to order!`, 'success');
+    // No toast popup - UI feedback via inline quantity controls
   };
 
   const handleUpdateQuantity = (cartItemId, qty) => {
     if (qty <= 0) {
       setCart(prev => prev.filter(i => i.cartItemId !== cartItemId));
     } else {
+      const cartItem = cart.find(i => i.cartItemId === cartItemId);
+      if (cartItem && qty > cartItem.quantity) {
+        if (cartItem.item.stock !== undefined && cartItem.item.stock !== null) {
+          const stockNum = Number(cartItem.item.stock);
+          if (qty > stockNum) {
+            showToast(`❌ Cannot add more. Only ${stockNum} ${cartItem.item.stock_unit || 'pcs'} available in stock.`, 'error');
+            return;
+          }
+        }
+      }
       setCart(prev => prev.map(i => i.cartItemId === cartItemId ? { ...i, quantity: qty } : i));
     }
   };
@@ -807,8 +1126,42 @@ export default function CustomerView() {
     return cart.reduce((total, cartItem) => total + cartItem.quantity, 0);
   };
 
+  const deductIngredientsForOrderItem = (menuItem, quantity) => {
+    if (!menuItem.recipe || !Array.isArray(menuItem.recipe)) return;
+    
+    const saved = localStorage.getItem('raw_ingredients_inventory');
+    if (!saved) return;
+    
+    let rawList = JSON.parse(saved);
+    let updated = false;
+
+    for (const step of menuItem.recipe) {
+      rawList = rawList.map(ing => {
+        if (ing.id === parseInt(step.ingredientId)) {
+          updated = true;
+          return { ...ing, stock: Math.max(0, ing.stock - (parseFloat(step.quantity) * quantity)) };
+        }
+        return ing;
+      });
+    }
+
+    if (updated) {
+      localStorage.setItem('raw_ingredients_inventory', JSON.stringify(rawList));
+      window.dispatchEvent(new Event('storage'));
+    }
+  };
+
   const handleCheckout = async () => {
     if (cart.length === 0) return;
+
+    // Check stock one more time before checkout
+    for (const cartItem of cart) {
+      const item = cartItem.item;
+      if (item.stock !== undefined && item.stock !== null && cartItem.quantity > item.stock) {
+        showToast(`❌ Stock shortage: Only ${item.stock} of ${item.name} remaining.`, 'error');
+        return;
+      }
+    }
 
     setIsVerifyingOrder(true);
     setVerificationStep(0);
@@ -840,11 +1193,25 @@ export default function CustomerView() {
     try {
       const newOrder = await createOrder(orderData);
       if (newOrder) {
+        // Deduct stocks in database/localoverrides
+        for (const cartItem of cart) {
+          const item = cartItem.item;
+          if (item.stock !== undefined && item.stock !== null) {
+            const newStock = Math.max(0, item.stock - cartItem.quantity);
+            await updateMenuItem(item.id, { stock: newStock });
+          }
+          // Deduct raw ingredients mapping
+          deductIngredientsForOrderItem(item, cartItem.quantity);
+        }
+
         setTimeout(() => {
           setIsVerifyingOrder(false);
           setPlacedOrder(newOrder);
           setOrderTracking(newOrder);
           setCart([]);
+          setShowFullCartDrawer(false);
+          setShowMenuCatalogDuringTracking(false);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
           localStorage.setItem(`placed_order_cafe_${cafeId}_table_${tableId}`, JSON.stringify(newOrder));
           setShowChoiceOverlay(true);
         }, 4000);
@@ -899,12 +1266,9 @@ export default function CustomerView() {
       }
     } catch (e) {
       console.error(e);
-      setIsBuzzerActive(false);
-      showToast('Connection error. Please try again.', 'error');
     }
   };
 
-  // Photo uploads & Bill request submits
   const handlePhotoSelect = (e) => {
     const files = Array.from(e.target.files);
     const totalFiles = [...billPhotos, ...files].slice(0, 3);
@@ -927,6 +1291,12 @@ export default function CustomerView() {
       return;
     }
     
+    const activeOrder = orderTracking || placedOrder;
+    if (!activeOrder) {
+      showToast('❌ No active order found to request bill for.', 'error');
+      return;
+    }
+
     setUploadingBill(true);
     setError(null);
     
@@ -939,8 +1309,8 @@ export default function CustomerView() {
         }
       }
       
-      let finalPrice = orderTracking.total_price;
-      let finalItems = orderTracking.items;
+      let finalPrice = activeOrder.total_price || 0;
+      let finalItems = activeOrder.items || '';
       
       if (voucherDiscount > 0) {
         const voucherDiscountAmount = finalPrice * voucherDiscount;
@@ -948,7 +1318,7 @@ export default function CustomerView() {
         finalItems = finalItems + `\n[🎟️ 20% Voucher Applied]`;
       }
       
-      const itemsCount = [...orderTracking.items.matchAll(/(\d+)x/g)].reduce((sum, match) => sum + parseInt(match[1]), 0);
+      const itemsCount = [...finalItems.matchAll(/(\d+)x/g)].reduce((sum, match) => sum + parseInt(match[1]), 0);
       const minItems = cafe?.discount_min_items || 0;
       const discountPercent = cafe?.discount_percentage || 0;
       
@@ -958,7 +1328,7 @@ export default function CustomerView() {
         finalItems = finalItems + `\n[🎁 ${discountPercent}% UGC Discount Applied]`;
       }
       
-      const updated = await updateOrder(orderTracking.id, { 
+      const updated = await updateOrder(activeOrder.id, { 
         status: 'bill_requested',
         total_price: finalPrice,
         items: finalItems,
@@ -972,21 +1342,27 @@ export default function CustomerView() {
         setShowBillRequestModal(false);
         setBillPhotos([]);
         setBillPhotosPreviews([]);
+        showToast('📝 Bill request submitted successfully!', 'success');
       } else {
-        setError('Failed to request bill. Please try again.');
+        showToast('❌ Failed to request bill. Please try again.', 'error');
       }
     } catch (e) {
-      console.error(e);
-      setError('An error occurred while uploading photos.');
+      console.error('Error submitting bill request:', e);
+      showToast('❌ An error occurred while submitting your bill request.', 'error');
     } finally {
       setUploadingBill(false);
     }
   };
 
   const handleRequestBillNoPhotos = async () => {
+    const activeOrder = orderTracking || placedOrder;
+    if (!activeOrder) {
+      showToast('❌ No active order found to request bill for.', 'error');
+      return;
+    }
     try {
-      let finalPrice = orderTracking.total_price;
-      let finalItems = orderTracking.items;
+      let finalPrice = activeOrder.total_price || 0;
+      let finalItems = activeOrder.items || '';
 
       if (voucherDiscount > 0) {
         const voucherDiscountAmount = finalPrice * voucherDiscount;
@@ -994,7 +1370,7 @@ export default function CustomerView() {
         finalItems = finalItems + `\n[🎟️ 20% Voucher Applied]`;
       }
 
-      const updated = await updateOrder(orderTracking.id, { 
+      const updated = await updateOrder(activeOrder.id, { 
         status: 'bill_requested',
         total_price: finalPrice,
         items: finalItems
@@ -1003,10 +1379,13 @@ export default function CustomerView() {
         setOrderTracking(updated);
         setPlacedOrder(updated);
         localStorage.setItem(`placed_order_cafe_${cafeId}_table_${tableId}`, JSON.stringify(updated));
+        showToast('📝 Bill request submitted successfully!', 'success');
+      } else {
+        showToast('❌ Failed to request bill. Please try again.', 'error');
       }
     } catch (err) {
       console.error(err);
-      showToast('Error requesting bill', 'error');
+      showToast('❌ Error requesting bill', 'error');
     }
   };
 
@@ -1049,7 +1428,7 @@ export default function CustomerView() {
 
   return (
     <div
-      className="customer-container animated-fade-in"
+      className={`customer-container ${cart.length > 0 ? 'has-cart' : ''}`}
       data-cv-theme={customerTheme}
       style={{ '--customer-accent': cafe?.theme_color || '#00f2fe' }}
     >
@@ -1443,213 +1822,309 @@ export default function CustomerView() {
         </div>
       )}
 
+      {orderTracking && (
+        <div style={{ textAlign: 'center', margin: '0 0 24px 0' }}>
+          <button 
+            type="button"
+            className="btn-place-another" 
+            onClick={() => {
+              const next = !showMenuCatalogDuringTracking;
+              setShowMenuCatalogDuringTracking(next);
+              if (next) {
+                setTimeout(() => {
+                  window.scrollBy({ top: 350, behavior: 'smooth' });
+                }, 150);
+              }
+            }}
+            style={{ 
+              background: 'rgba(var(--customer-accent-rgb), 0.05)', 
+              border: '2px solid rgba(var(--customer-accent-rgb), 0.3)', 
+              color: 'var(--customer-accent)',
+              padding: '12px 24px',
+              borderRadius: '12px',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              fontSize: '0.9rem',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            {showMenuCatalogDuringTracking ? '📖 Hide Menu Catalog' : '📖 View Menu & Order More'}
+          </button>
+        </div>
+      )}
+
       {/* ── MAIN CONTENT AREA (menu + inline cart) ── */}
-      <div className="cv-content-area">
+      {(!orderTracking || showMenuCatalogDuringTracking) && (
+        <div className="cv-content-area">
 
-        {/* ── MENU SECTION ── */}
-        <div className="cv-menu-section">
+          {/* ── MENU SECTION ── */}
+          <div className="cv-menu-section">
 
-          {/* Category Filter Scroller */}
-          <div className="cv-category-scroller">
-            {categories.map(cat => (
-              <button
-                key={cat}
-                className={`cv-cat-pill ${activeCategory === cat ? 'active' : ''}`}
-                onClick={() => setActiveCategory(cat)}
-              >
-                <span className="cat-icon">{CATEGORY_ICONS[cat] || '🍴'}</span>
-                {cat}
-              </button>
-            ))}
-          </div>
-
-          {/* Most Ordered — horizontal scroller (only show on 'All' filter) */}
-          {activeCategory === 'All' && mostOrderedItems.length > 0 && (
-            <div className="cv-most-ordered-section">
-              <div className="cv-section-title">
-                <span className="section-title-icon">🔥</span>
-                <h2>Most Ordered</h2>
-              </div>
-              <div className="cv-horizontal-scroller">
-                {mostOrderedItems.map(item => (
-                  <div key={item.id} className="cv-popular-card glass-card">
-                    {item.image_url ? (
-                      <img src={item.image_url} alt={item.name} className="cv-popular-img" />
-                    ) : (
-                      <div className="cv-popular-img-placeholder">🍽️</div>
-                    )}
-                    <div className="cv-popular-info">
-                      <div className="cv-popular-name-row">
-                        <VegDot isVeg={item.is_veg !== false} />
-                        <span className="cv-popular-name">{item.name}</span>
-                      </div>
-                      <span className="cv-popular-price">{formatPrice(item.price)}</span>
-                      {item.description && (
-                        <span className="cv-popular-desc">{item.description}</span>
+            {/* Most Ordered — horizontal scroller (only show on 'All' filter) */}
+            {activeCategory === 'All' && mostOrderedItems.length > 0 && (
+              <div className="cv-most-ordered-section">
+                <div className="cv-section-title">
+                  <span className="section-title-icon">🔥</span>
+                  <h2>Most Ordered</h2>
+                </div>
+                <div className="cv-horizontal-scroller">
+                  {mostOrderedItems.map(item => (
+                    <div key={item.id} className="cv-popular-card glass-card">
+                      {item.image_url ? (
+                        <img src={item.image_url} alt={item.name} className="cv-popular-img" />
+                      ) : (
+                        <div className="cv-popular-img-placeholder">🍽️</div>
                       )}
+                      <div className="cv-popular-info">
+                        <div className="cv-popular-name-row">
+                          <VegDot isVeg={item.is_veg !== false} />
+                          <span className="cv-popular-name">{item.name}</span>
+                        </div>
+                        <span className="cv-popular-price">{formatPrice(item.price)}</span>
+                        {item.stock !== undefined && item.stock !== null && Number(item.stock) <= 0 && (
+                          <div style={{ marginTop: '4px' }}>
+                            <span className="stock-badge danger">Out of Stock</span>
+                          </div>
+                        )}
+                        {item.description && (
+                          <span className="cv-popular-desc">{item.description}</span>
+                        )}
+                      </div>
+                      {(() => {
+                        const cartItemId = `${item.id}`;
+                        const cartEntry = cart.find(i => i.cartItemId === cartItemId || i.cartItemId.startsWith(`${item.id}-`));
+                        const isOutOfStock = item.stock !== undefined && item.stock !== null && Number(item.stock) <= 0;
+                        if (isOutOfStock) {
+                          return <button className="cv-popular-add-btn" disabled style={{ opacity: 0.5, cursor: 'not-allowed', background: '#4b5563' }}>Sold Out</button>;
+                        }
+                        if (cartEntry) {
+                          return (
+                            <div className="cv-inline-qty-ctrl">
+                              <button className="cv-qty-btn" onClick={() => handleUpdateQuantity(cartEntry.cartItemId, cartEntry.quantity - 1)}>−</button>
+                              <span className="cv-qty-num">{cartEntry.quantity}</span>
+                              <button className="cv-qty-btn" onClick={() => handleAddToCart(item)}>+</button>
+                            </div>
+                          );
+                        }
+                        return <button className="cv-popular-add-btn" onClick={() => handleAddToCart(item)}>+ Add</button>;
+                      })()}
                     </div>
-                    <button
-                      className="cv-popular-add-btn"
-                      onClick={() => handleAddToCart(item)}
-                    >
-                      + Add
-                    </button>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* All Items — vertical list on mobile, 2-col grid on desktop */}
-          <div className="cv-all-items-section">
-            <div className="cv-section-title">
-              <span className="section-title-icon">{CATEGORY_ICONS[activeCategory] || '🍴'}</span>
-              <h2>{activeCategory === 'All' ? 'All Items' : activeCategory}</h2>
+            {/* Category Filter Scroller */}
+            <div className="cv-category-scroller">
+              {categories.map(cat => (
+                <button
+                  key={cat}
+                  className={`cv-cat-pill ${activeCategory === cat ? 'active' : ''}`}
+                  onClick={() => setActiveCategory(cat)}
+                >
+                  <span className="cat-icon">{CATEGORY_ICONS[cat] || '🍴'}</span>
+                  {cat}
+                </button>
+              ))}
             </div>
 
-            {filteredMenuItems.length === 0 ? (
-              <div className="empty-state glass-card">
-                <p>No dishes found in this category.</p>
+            {/* All Items — vertical list on mobile, 2-col grid on desktop */}
+            <div className="cv-all-items-section">
+              <div className="cv-section-title">
+                <span className="section-title-icon">{CATEGORY_ICONS[activeCategory] || '🍴'}</span>
+                <h2>{activeCategory === 'All' ? 'All Items' : activeCategory}</h2>
+              </div>
+
+              {filteredMenuItems.length === 0 ? (
+                <div className="empty-state glass-card">
+                  <p>No dishes found in this category.</p>
+                </div>
+              ) : (
+                <div className="cv-items-list">
+                  {filteredMenuItems.map(item => (
+                    <div key={item.id} className="cv-item-card glass-card">
+                      {item.image_url ? (
+                        <img src={item.image_url} alt={item.name} className="cv-item-img" />
+                      ) : (
+                        <div className="cv-item-img-placeholder">🍽️</div>
+                      )}
+                      <div className="cv-item-body">
+                        <div className="cv-item-top">
+                          <div className="cv-item-name-row">
+                            <VegDot isVeg={item.is_veg !== false} />
+                            <h3 className="cv-item-name">{item.name}</h3>
+                          </div>
+                          <span className="cv-item-price">{formatPrice(item.price)}</span>
+                        </div>
+                        {item.description && (
+                          <p className="cv-item-desc">{item.description}</p>
+                        )}
+                        
+                        {/* Stock indication */}
+                        {item.stock !== undefined && item.stock !== null && Number(item.stock) <= 0 && (
+                          <div style={{ marginTop: '6px', marginBottom: '8px' }}>
+                            <span className="stock-badge danger">Out of Stock</span>
+                          </div>
+                        )}
+
+                        <div className="cv-item-footer">
+                          <span className={`cv-cat-tag tag-${item.category?.toLowerCase().replace(/\s+/g, '-')}`}>
+                            {item.category}
+                          </span>
+                          {item.portion_options && item.portion_options.length > 0 && (
+                            <select
+                              className="cv-portion-select"
+                              value={selectedPortions[item.id] || ''}
+                              onChange={(e) => setSelectedPortions({ ...selectedPortions, [item.id]: e.target.value })}
+                            >
+                              {item.portion_options.map(p => (
+                                <option key={p} value={p}>{p}</option>
+                              ))}
+                            </select>
+                          )}
+                          {(() => {
+                            const selectedPortion = selectedPortions[item.id] || null;
+                            const cartItemId = selectedPortion ? `${item.id}-${selectedPortion}` : `${item.id}`;
+                            const cartEntry = cart.find(i => i.cartItemId === cartItemId);
+                            const isOutOfStock = item.stock !== undefined && item.stock !== null && Number(item.stock) <= 0;
+                            if (isOutOfStock) {
+                              return <button className="cv-add-btn" disabled style={{ opacity: 0.5, cursor: 'not-allowed', background: '#4b5563', color: '#9ca3af' }}>Sold Out</button>;
+                            }
+                            if (cartEntry) {
+                              return (
+                                <div className="cv-inline-qty-ctrl">
+                                  <button className="cv-qty-btn" onClick={() => handleUpdateQuantity(cartEntry.cartItemId, cartEntry.quantity - 1)}>−</button>
+                                  <span className="cv-qty-num">{cartEntry.quantity}</span>
+                                  <button className="cv-qty-btn" onClick={() => handleAddToCart(item)}>+</button>
+                                </div>
+                              );
+                            }
+                            return <button className="cv-add-btn" onClick={() => handleAddToCart(item)}>+ Add</button>;
+                          })()}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+          </div>{/* end cv-menu-section */}
+
+          {/* ── DESKTOP CART SIDEBAR ── (Hidden on Mobile) */}
+          <div className="cv-cart-sidebar glass-card">
+            <h2 className="cv-cart-title">🛒 Your Order</h2>
+            {cart.length === 0 ? (
+              <div className="cv-cart-empty">
+                <span className="cv-cart-empty-icon">🛍️</span>
+                <p>Your cart is empty</p>
+                <span className="cv-cart-empty-sub">Add dishes from the menu!</span>
               </div>
             ) : (
-              <div className="cv-items-list">
-                {filteredMenuItems.map(item => (
-                  <div key={item.id} className="cv-item-card glass-card">
-                    {item.image_url ? (
-                      <img src={item.image_url} alt={item.name} className="cv-item-img" />
-                    ) : (
-                      <div className="cv-item-img-placeholder">🍽️</div>
-                    )}
-                    <div className="cv-item-body">
-                      <div className="cv-item-top">
-                        <div className="cv-item-name-row">
-                          <VegDot isVeg={item.is_veg !== false} />
-                          <h3 className="cv-item-name">{item.name}</h3>
-                        </div>
-                        <span className="cv-item-price">{formatPrice(item.price)}</span>
+              <div className="cv-cart-workspace">
+                <div className="cv-cart-items">
+                  {cart.map(cartItem => (
+                    <div key={cartItem.cartItemId} className="cv-cart-item">
+                      <div className="cv-cart-item-info">
+                        <h4>{cartItem.item.name}</h4>
+                        {cartItem.portion && <span className="cv-cart-portion">Size: {cartItem.portion}</span>}
+                        <span className="cv-cart-item-price">{formatPrice(cartItem.item.price * cartItem.quantity)}</span>
                       </div>
-                      {item.description && (
-                        <p className="cv-item-desc">{item.description}</p>
-                      )}
-                      <div className="cv-item-footer">
-                        <span className={`cv-cat-tag tag-${item.category?.toLowerCase().replace(/\s+/g, '-')}`}>
-                          {item.category}
-                        </span>
-                        {item.portion_options && item.portion_options.length > 0 && (
-                          <select
-                            className="cv-portion-select"
-                            value={selectedPortions[item.id] || ''}
-                            onChange={(e) => setSelectedPortions({ ...selectedPortions, [item.id]: e.target.value })}
-                          >
-                            {item.portion_options.map(p => (
-                              <option key={p} value={p}>{p}</option>
-                            ))}
-                          </select>
-                        )}
-                        <button
-                          className="cv-add-btn"
-                          onClick={() => handleAddToCart(item)}
-                        >
-                          + Add
-                        </button>
+                      <div className="cv-qty-control">
+                        <button onClick={() => handleUpdateQuantity(cartItem.cartItemId, cartItem.quantity - 1)}>−</button>
+                        <span>{cartItem.quantity}</span>
+                        <button onClick={() => handleUpdateQuantity(cartItem.cartItemId, cartItem.quantity + 1)}>+</button>
                       </div>
                     </div>
+                  ))}
+                </div>
+                <div className="cv-cart-summary">
+                  <div className="cv-cart-total-row">
+                    <span>Grand Total</span>
+                    <strong>{formatPrice(cartTotal)}</strong>
                   </div>
-                ))}
+                  <p className="cv-cart-tax-note">Incl. applicable taxes</p>
+                  <button
+                    className="cv-place-order-btn"
+                    onClick={handleCheckout}
+                    disabled={loading}
+                  >
+                    {loading ? 'Sending...' : '🚀 Proceed to Pay'}
+                  </button>
+                </div>
               </div>
             )}
           </div>
 
-          {/* ── MOBILE INLINE CART ── (replaces drawer popup) */}
-          {cart.length > 0 && (
-            <div className="cv-inline-cart glass-card">
-              <div className="cv-inline-cart-header">
-                <h3>🛒 Order Summary</h3>
-                <span className="cv-inline-cart-count">{cartCount} item{cartCount !== 1 ? 's' : ''}</span>
-              </div>
-
-              <div className="cv-cart-items">
-                {cart.map(cartItem => (
-                  <div key={cartItem.cartItemId} className="cv-cart-item">
-                    <div className="cv-cart-item-info">
-                      <h4>{cartItem.item.name}</h4>
-                      {cartItem.portion && <span className="cv-cart-portion">Size: {cartItem.portion}</span>}
-                      <span className="cv-cart-item-price">{formatPrice(cartItem.item.price * cartItem.quantity)}</span>
-                    </div>
-                    <div className="cv-qty-control">
-                      <button onClick={() => handleUpdateQuantity(cartItem.cartItemId, cartItem.quantity - 1)}>−</button>
-                      <span>{cartItem.quantity}</span>
-                      <button onClick={() => handleUpdateQuantity(cartItem.cartItemId, cartItem.quantity + 1)}>+</button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="cv-cart-summary">
-                <div className="cv-cart-total-row">
-                  <span>Grand Total</span>
-                  <strong>{formatPrice(cartTotal)}</strong>
-                </div>
-                <p className="cv-cart-tax-note">Price incl. applicable taxes</p>
-                <button
-                  className="cv-place-order-btn"
-                  onClick={handleCheckout}
-                  disabled={loading}
-                >
-                  {loading ? 'Sending Order...' : '🚀 Proceed to Pay'}
-                </button>
-              </div>
-            </div>
-          )}
-
-        </div>{/* end cv-menu-section */}
-
-        {/* ── DESKTOP CART SIDEBAR ── */}
-        <div className="cv-cart-sidebar glass-card">
-          <h2 className="cv-cart-title">🛒 Your Order</h2>
-          {cart.length === 0 ? (
-            <div className="cv-cart-empty">
-              <span className="cv-cart-empty-icon">🛍️</span>
-              <p>Your cart is empty</p>
-              <span className="cv-cart-empty-sub">Add dishes from the menu!</span>
-            </div>
-          ) : (
-            <div className="cv-cart-workspace">
-              <div className="cv-cart-items">
-                {cart.map(cartItem => (
-                  <div key={cartItem.cartItemId} className="cv-cart-item">
-                    <div className="cv-cart-item-info">
-                      <h4>{cartItem.item.name}</h4>
-                      {cartItem.portion && <span className="cv-cart-portion">Size: {cartItem.portion}</span>}
-                      <span className="cv-cart-item-price">{formatPrice(cartItem.item.price * cartItem.quantity)}</span>
-                    </div>
-                    <div className="cv-qty-control">
-                      <button onClick={() => handleUpdateQuantity(cartItem.cartItemId, cartItem.quantity - 1)}>−</button>
-                      <span>{cartItem.quantity}</span>
-                      <button onClick={() => handleUpdateQuantity(cartItem.cartItemId, cartItem.quantity + 1)}>+</button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="cv-cart-summary">
-                <div className="cv-cart-total-row">
-                  <span>Grand Total</span>
-                  <strong>{formatPrice(cartTotal)}</strong>
-                </div>
-                <p className="cv-cart-tax-note">Incl. applicable taxes</p>
-                <button
-                  className="cv-place-order-btn"
-                  onClick={handleCheckout}
-                  disabled={loading}
-                >
-                  {loading ? 'Sending...' : '🚀 Proceed to Pay'}
-                </button>
-              </div>
-            </div>
-          )}
         </div>
+      )}
 
-      </div>{/* end cv-content-area */}
+      {/* ── MOBILE STICKY BOTTOM CART BAR (Image 2) ── */}
+      {cart.length > 0 && !showFullCartDrawer && (
+        <div className="cv-sticky-cart-bar animated-slide-up">
+          <div className="cv-sticky-cart-left">
+            <span className="cv-sticky-cart-count">{cartCount} item{cartCount !== 1 ? 's' : ''} Added</span>
+            <span className="cv-sticky-cart-total">{formatPrice(cartTotal)}</span>
+          </div>
+          <button
+            className="cv-sticky-cart-btn"
+            onClick={() => setShowFullCartDrawer(true)}
+          >
+            Proceed →
+          </button>
+        </div>
+      )}
+
+      {/* ── MOBILE SLIDE-UP CART DRAWER OVERLAY (Image 3) ── */}
+      {showFullCartDrawer && (
+        <div className="cv-mobile-cart-overlay animated-fade-in" onClick={() => setShowFullCartDrawer(false)}>
+          <div className="cv-mobile-cart-drawer glass-card animated-slide-up" onClick={(e) => e.stopPropagation()}>
+            <div className="cv-drawer-handle"></div>
+            <div className="cv-mobile-cart-header">
+              <h3>🛒 Order Summary</h3>
+              <button className="cv-mobile-cart-close" onClick={() => setShowFullCartDrawer(false)}>✕</button>
+            </div>
+            
+            <div className="cv-cart-drawer-body">
+              <div className="cv-cart-items-wrapper">
+                {cart.map(cartItem => (
+                  <div key={cartItem.cartItemId} className="cv-cart-item">
+                    <div className="cv-cart-item-info">
+                      <h4>{cartItem.item.name}</h4>
+                      {cartItem.portion && <span className="cv-cart-portion">Size: {cartItem.portion}</span>}
+                      <span className="cv-cart-item-price">{formatPrice(cartItem.item.price * cartItem.quantity)}</span>
+                    </div>
+                    <div className="cv-qty-control">
+                      <button onClick={() => handleUpdateQuantity(cartItem.cartItemId, cartItem.quantity - 1)}>−</button>
+                      <span>{cartItem.quantity}</span>
+                      <button onClick={() => handleUpdateQuantity(cartItem.cartItemId, cartItem.quantity + 1)}>+</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="cv-cart-summary">
+                <div className="cv-cart-total-row">
+                  <span>Total</span>
+                  <strong className="cv-cart-total-value">{formatPrice(cartTotal)}</strong>
+                </div>
+                <p className="cv-cart-tax-note">taxes will apply</p>
+                <button
+                  className="cv-place-order-btn"
+                  onClick={handleCheckout}
+                  disabled={loading}
+                >
+                  {loading ? 'Sending Order...' : 'Proceed to Pay'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

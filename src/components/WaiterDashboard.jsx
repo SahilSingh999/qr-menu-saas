@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSupabase } from '../context/SupabaseContext';
 import { useCurrency } from '../context/CurrencyContext';
+import { PrintBillModal } from './AdminPanel';
 
 export default function WaiterDashboard() {
   const {
@@ -12,12 +13,35 @@ export default function WaiterDashboard() {
     updateOrderStatus,
     updateOrder,
     subscribeToOrders,
-    fetchStaff
+    fetchStaff,
+    fetchMenuItems,
+    updateMenuItem
   } = useSupabase();
 
   const { formatPrice, setCurrencyCode } = useCurrency();
   const [cafes, setCafes] = useState([]);
   const [selectedCafe, setSelectedCafe] = useState(null);
+  const [menuItems, setMenuItems] = useState([]);
+  const [selectedOrderForBill, setSelectedOrderForBill] = useState(null);
+
+  // Raw Inventory states for Waiter view
+  const [rawIngredients, setRawIngredients] = useState(() => {
+    const saved = localStorage.getItem('raw_ingredients_inventory');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  useEffect(() => {
+    const syncIngredients = () => {
+      const saved = localStorage.getItem('raw_ingredients_inventory');
+      if (saved) setRawIngredients(JSON.parse(saved));
+    };
+    window.addEventListener('storage', syncIngredients);
+    const interval = setInterval(syncIngredients, 4000);
+    return () => {
+      window.removeEventListener('storage', syncIngredients);
+      clearInterval(interval);
+    };
+  }, []);
 
   // Sync currency with selected cafe changes
   useEffect(() => {
@@ -217,9 +241,14 @@ export default function WaiterDashboard() {
   useEffect(() => {
     if (selectedCafe) {
       loadOrders(selectedCafe.id);
+      loadMenuItems(selectedCafe.id);
 
       const unsubscribe = subscribeToOrders(selectedCafe.id, (payload) => {
         console.log('Waiter Realtime Update:', payload);
+        
+        // Refresh menu items stock on any order update/insert
+        loadMenuItems(selectedCafe.id);
+
         if (payload.eventType === 'INSERT') {
           setOrders(prev => [payload.new, ...prev]);
           if (payload.new.status === 'assistance_needed') {
@@ -247,6 +276,7 @@ export default function WaiterDashboard() {
       };
     } else {
       setOrders([]);
+      setMenuItems([]);
     }
   }, [selectedCafe, isAudioMuted]);
 
@@ -265,6 +295,35 @@ export default function WaiterDashboard() {
     const data = await fetchOrders(cafeId);
     if (data) setOrders(data);
   };
+
+  const loadMenuItems = async (cafeId) => {
+    const data = await fetchMenuItems(cafeId);
+    if (data) setMenuItems(data);
+  };
+
+  const speakLowStockNotification = (itemName, remaining, unit) => {
+    if (isAudioMuted || !window.speechSynthesis) return;
+    const key = `low_stock_spoken_${itemName}_${remaining}`;
+    if (sessionStorage.getItem(key)) return;
+    sessionStorage.setItem(key, 'true');
+    speakNotification(`Warning: ${itemName} is running low. Only ${remaining} ${unit || 'items'} left.`);
+  };
+
+  useEffect(() => {
+    // Menu items stock alerts
+    menuItems.forEach(item => {
+      if (item.stock !== undefined && item.stock !== null && item.stock > 0 && item.stock <= (item.low_stock_threshold || 10)) {
+        speakLowStockNotification(item.name, item.stock, item.stock_unit);
+      }
+    });
+
+    // Raw ingredients stock alerts
+    rawIngredients.forEach(item => {
+      if (item.stock !== undefined && item.stock !== null && item.stock > 0 && item.stock <= (item.low_stock_threshold || 2)) {
+        speakLowStockNotification(`Raw Material ${item.name}`, item.stock, item.unit);
+      }
+    });
+  }, [menuItems, rawIngredients, isAudioMuted]);
 
   const handleUpdateStatus = async (orderId, currentStatus) => {
     let nextStatus = 'pending';
@@ -298,6 +357,35 @@ export default function WaiterDashboard() {
     const updated = await updateOrder(orderId, { status: 'bill_approved' });
     if (updated) {
       setOrders(prev => prev.map(o => o.id === orderId ? updated : o));
+    }
+  };
+
+  const handleApproveBillWithDetails = async (orderId, applyDiscount, discountPct, finalTotal) => {
+    const order = orders.find(o => o.id === orderId);
+    if (!order) return;
+
+    let updatedItemsText = order.items;
+    updatedItemsText = updatedItemsText
+      .replace(/\n\[🎟️.*\]/g, '')
+      .replace(/\n\[🎁.*\]/g, '')
+      .replace(/\n\[❌.*\]/g, '');
+
+    if (applyDiscount) {
+      updatedItemsText += `\n[🎁 ${discountPct}% Discount Applied]`;
+    } else {
+      updatedItemsText += `\n[❌ Discount Revoked/Not Applied]`;
+    }
+
+    const updated = await updateOrder(orderId, {
+      status: 'bill_approved',
+      total_price: finalTotal,
+      items: updatedItemsText
+    });
+
+    if (updated) {
+      setOrders(prev => prev.map(o => o.id === orderId ? updated : o));
+      setSelectedOrderForBill(null);
+      showToast('🎉 Bill approved successfully!', 'success');
     }
   };
 
@@ -538,6 +626,34 @@ export default function WaiterDashboard() {
         </div>
       ) : (
         <div className="waiter-workspace">
+          {/* Low Stock Warning Ticker Bar */}
+          {(() => {
+            const lowStockItems = menuItems.filter(item => item.stock !== undefined && item.stock !== null && item.stock <= (item.low_stock_threshold || 10));
+            const lowStockRaw = rawIngredients.filter(item => item.stock !== undefined && item.stock !== null && item.stock <= (item.low_stock_threshold || 2));
+            
+            if (lowStockItems.length === 0 && lowStockRaw.length === 0) return null;
+            return (
+              <div className="low-stock-ticker-bar animated-fade-in">
+                <div className="low-stock-ticker-header">
+                  <span>⚠️</span>
+                  <strong>Inventory Warning: The following items are running low!</strong>
+                </div>
+                <div className="low-stock-ticker-items">
+                  {lowStockItems.map(item => (
+                    <span key={`menu-${item.id}`} className="low-stock-ticker-item">
+                      🍔 <strong>{item.name}</strong>: {item.stock === 0 ? 'Out of stock' : `${item.stock} ${item.stock_unit} left`}
+                    </span>
+                  ))}
+                  {lowStockRaw.map(item => (
+                    <span key={`raw-${item.id}`} className="low-stock-ticker-item" style={{ background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.3)' }}>
+                      📦 <strong>[Raw] {item.name}</strong>: {item.stock === 0 ? 'Out of stock' : `${item.stock} ${item.unit} left`}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Status Tab Filters */}
           <div className="waiter-filters">
             <button 
@@ -696,13 +812,22 @@ export default function WaiterDashboard() {
                     {order.status !== 'completed' && order.status !== 'cancelled' && order.status !== 'bill_approved' && order.status !== 'assistance_resolved' && (
                       <div className="waiter-action-layout">
                         {order.status === 'bill_requested' ? (
-                          <button 
-                            className="action-btn-progress progress-bill-approve"
-                            onClick={() => handleApproveBill(order.id)}
-                            style={{ background: '#10b981', color: '#0b0f19', width: '100%', fontWeight: '700' }}
-                          >
-                            ✅ Approve Bill & Voucher
-                          </button>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
+                            <button 
+                              className="action-btn-progress progress-bill-approve"
+                              onClick={() => setSelectedOrderForBill(order)}
+                              style={{ background: '#3b82f6', color: 'white', width: '100%', fontWeight: '700', padding: '12px' }}
+                            >
+                              🖨️ Review & Print Bill
+                            </button>
+                            <button 
+                              className="action-btn-progress progress-bill-approve"
+                              onClick={() => handleApproveBill(order.id)}
+                              style={{ background: '#10b981', color: '#0b0f19', width: '100%', fontWeight: '700', padding: '12px' }}
+                            >
+                              ✅ Quick Approve Bill
+                            </button>
+                          </div>
                         ) : order.status === 'assistance_needed' ? (
                           <button 
                             className="action-btn-progress progress-assistance-resolve"
@@ -762,11 +887,23 @@ export default function WaiterDashboard() {
                       )
                     )}
                     {(order.status === 'completed' || order.status === 'cancelled' || order.status === 'bill_approved' || order.status === 'assistance_resolved') && (
-                      <div className="archived-status-label">
-                        {order.status === 'completed' && '✅ Completed & Served'}
-                        {order.status === 'bill_approved' && '💰 Bill Approved & Voucher Released'}
-                        {order.status === 'assistance_resolved' && '🤝 Help Summon Resolved'}
-                        {order.status === 'cancelled' && '❌ Cancelled'}
+                      <div className="archived-status-label" style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center' }}>
+                        <div>
+                          {order.status === 'completed' && '✅ Completed & Served'}
+                          {order.status === 'bill_approved' && '💰 Bill Approved & Voucher Released'}
+                          {order.status === 'assistance_resolved' && '🤝 Help Summon Resolved'}
+                          {order.status === 'cancelled' && '❌ Cancelled'}
+                        </div>
+                        {(order.status === 'bill_approved' || order.status === 'completed') && (
+                          <button
+                            type="button"
+                            className="btn-select"
+                            onClick={() => setSelectedOrderForBill(order)}
+                            style={{ padding: '6px 12px', fontSize: '0.8rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', borderRadius: '8px', color: 'white', fontWeight: 'bold' }}
+                          >
+                            🖨️ Reprint Bill Receipt
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -816,6 +953,19 @@ export default function WaiterDashboard() {
         <div className={`customer-toast toast-${toast.type}`}>
           {toast.msg}
         </div>
+      )}
+
+      {/* Print Bill Modal overlay */}
+      {selectedOrderForBill && (
+        <PrintBillModal
+          order={selectedOrderForBill}
+          cafe={selectedCafe}
+          menuItems={menuItems}
+          formatPrice={formatPrice}
+          onClose={() => setSelectedOrderForBill(null)}
+          onApproveDiscount={handleApproveBillWithDetails}
+          isWaiter={true}
+        />
       )}
     </div>
   );

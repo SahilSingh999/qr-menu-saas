@@ -18,6 +18,7 @@ export default function AdminPanel() {
     fetchOrders,
     createOrder,
     updateOrderStatus,
+    updateOrder,
     deleteOrder,
     subscribeToOrders,
     uploadImage,
@@ -60,6 +61,8 @@ export default function AdminPanel() {
   const [logoPreview, setLogoPreview] = useState('');
   const [cafeThemeColor, setCafeThemeColor] = useState('#00f2fe');
   const [cafeTableCount, setCafeTableCount] = useState(10);
+  const [cafePhone, setCafePhone] = useState('');
+  const [cafeFooterMsg, setCafeFooterMsg] = useState('');
   const [qrBaseUrl, setQrBaseUrl] = useState(window.location.origin);
 
   const handleFileChange = (e) => {
@@ -90,6 +93,12 @@ export default function AdminPanel() {
   const [portionsList, setPortionsList] = useState([]);
   const [itemFile, setItemFile] = useState(null);
   const [itemPreview, setItemPreview] = useState('');
+  const [itemStock, setItemStock] = useState('');
+  const [itemLowStockThreshold, setItemLowStockThreshold] = useState('');
+  const [itemStockUnit, setItemStockUnit] = useState('pcs');
+  const [recipeList, setRecipeList] = useState([]);
+  const [selectedRecipeIngId, setSelectedRecipeIngId] = useState('');
+  const [recipeQtyInput, setRecipeQtyInput] = useState('');
 
   // Target cafe branch for menu item — independent of global selectedCafe
   const [menuTargetCafe, setMenuTargetCafe] = useState(null);
@@ -97,6 +106,14 @@ export default function AdminPanel() {
   // Discount config states
   const [discountMinItems, setDiscountMinItems] = useState(0);
   const [discountPercentage, setDiscountPercentage] = useState(0);
+  const [discountPhone, setDiscountPhone] = useState('');
+  const [discountFooterMsg, setDiscountFooterMsg] = useState('');
+
+  // Billing Modal State
+  const [selectedOrderForBill, setSelectedOrderForBill] = useState(null);
+
+  // Simulator Portion Selection State
+  const [selectedPortionsSim, setSelectedPortionsSim] = useState({});
 
   const handleUpdateDiscount = async (e) => {
     e.preventDefault();
@@ -104,13 +121,15 @@ export default function AdminPanel() {
     const targetId = menuTargetCafe.id;
     const updated = await updateCafe(targetId, {
       discount_min_items: parseInt(discountMinItems) || 0,
-      discount_percentage: parseInt(discountPercentage) || 0
+      discount_percentage: parseInt(discountPercentage) || 0,
+      phone: discountPhone,
+      footer_message: discountFooterMsg
     });
     if (updated) {
       setCafes(prev => prev.map(c => c.id === targetId ? updated : c));
       setMenuTargetCafe(updated);
       if (selectedCafe?.id === targetId) setSelectedCafe(updated);
-      showAdminAlert('Discount settings updated successfully!');
+      showAdminAlert('Cafe settings and bill branding updated successfully!');
     }
   };
 
@@ -119,12 +138,33 @@ export default function AdminPanel() {
   const [deleteItemConfirmId, setDeleteItemConfirmId] = useState(null);
   const [cancelOrderConfirmId, setCancelOrderConfirmId] = useState(null);
   const [deleteOrderConfirmId, setDeleteOrderConfirmId] = useState(null);
+  const [rawItemToDelete, setRawItemToDelete] = useState(null);
   const [adminAlertMsg, setAdminAlertMsg] = useState('');
 
   const showAdminAlert = (msg) => {
     setAdminAlertMsg(msg);
     setTimeout(() => setAdminAlertMsg(''), 3500);
   };
+
+  const speakLowStockNotification = (itemName, remaining, unit) => {
+    if (!window.speechSynthesis) return;
+    const key = `low_stock_spoken_${itemName}_${remaining}`;
+    if (sessionStorage.getItem(key)) return;
+    sessionStorage.setItem(key, 'true');
+    
+    const utterance = new SpeechSynthesisUtterance(`Warning: ${itemName} is running low. Only ${remaining} ${unit || 'items'} left.`);
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+    window.speechSynthesis.speak(utterance);
+  };
+
+  useEffect(() => {
+    menuItems.forEach(item => {
+      if (item.stock !== undefined && item.stock !== null && item.stock > 0 && item.stock <= (item.low_stock_threshold || 10)) {
+        speakLowStockNotification(item.name, item.stock, item.stock_unit);
+      }
+    });
+  }, [menuItems]);
 
   const handleItemFileChange = (e) => {
     const file = e.target.files[0];
@@ -148,6 +188,76 @@ export default function AdminPanel() {
   const [selectedItems, setSelectedItems] = useState([]); // Array of { item, quantity }
   const [customOrderText, setCustomOrderText] = useState('');
 
+  // 📦 Raw Inventory / Ingredients States & Logic
+  const [rawIngredients, setRawIngredients] = useState(() => {
+    const saved = localStorage.getItem('raw_ingredients_inventory');
+    return saved ? JSON.parse(saved) : [
+      { id: 1, name: 'Maida / Flour', stock: 5, low_stock_threshold: 2, unit: 'KG' },
+      { id: 2, name: 'Cigarette Boxes', stock: 50, low_stock_threshold: 10, unit: 'packs' },
+      { id: 3, name: 'Cold Drink Bottles', stock: 50, low_stock_threshold: 5, unit: 'bottles' }
+    ];
+  });
+
+  const [rawName, setRawName] = useState('');
+  const [rawStock, setRawStock] = useState('');
+  const [rawThreshold, setRawThreshold] = useState('');
+  const [rawUnit, setRawUnit] = useState('KG');
+
+  useEffect(() => {
+    localStorage.setItem('raw_ingredients_inventory', JSON.stringify(rawIngredients));
+    window.dispatchEvent(new Event('storage'));
+  }, [rawIngredients]);
+
+  const formatIngredientQty = (qty, unit) => {
+    const num = parseFloat(qty);
+    if (isNaN(num)) return `${qty} ${unit}`;
+    if (num === 0) return `0 ${unit}`;
+    
+    if (unit === 'KG' && num < 1) {
+      return `${(num * 1000).toFixed(0)} gm`;
+    }
+    if (unit === 'Litres' && num < 1) {
+      return `${(num * 1000).toFixed(0)} ml`;
+    }
+    return `${num} ${unit}`;
+  };
+
+  const handleAddRawIngredient = (e) => {
+    e.preventDefault();
+    if (!rawName.trim()) return;
+    const stockVal = parseFloat(rawStock) || 0;
+    const newItem = {
+      id: Date.now(),
+      name: rawName,
+      stock: stockVal,
+      initial_stock: stockVal, // Track the capacity!
+      low_stock_threshold: parseFloat(rawThreshold) || 1,
+      unit: rawUnit
+    };
+    setRawIngredients(prev => [...prev, newItem]);
+    setRawName('');
+    setRawStock('');
+    setRawThreshold('');
+    setRawUnit('KG');
+  };
+
+  const handleUpdateRawStock = (id, newStockVal) => {
+    const val = Math.max(0, parseFloat(newStockVal) || 0);
+    setRawIngredients(prev => prev.map(item => {
+      if (item.id === id) {
+        const prevInitial = item.initial_stock !== undefined ? item.initial_stock : item.stock;
+        // If refilled (updated stock is higher than previous initial_stock), increase the initial_stock capacity as well!
+        const nextInitial = val > prevInitial ? val : prevInitial;
+        return { ...item, stock: val, initial_stock: nextInitial };
+      }
+      return item;
+    }));
+  };
+
+  const handleDeleteRawIngredient = (id) => {
+    setRawIngredients(prev => prev.filter(item => item.id !== id));
+  };
+
   // Fetch initial data (Cafes)
   useEffect(() => {
     loadCafes();
@@ -159,6 +269,8 @@ export default function AdminPanel() {
       setMenuTargetCafe(selectedCafe);
       setDiscountMinItems(selectedCafe.discount_min_items || 0);
       setDiscountPercentage(selectedCafe.discount_percentage || 0);
+      setDiscountPhone(selectedCafe.phone || '');
+      setDiscountFooterMsg(selectedCafe.footer_message || '');
       loadMenuItems(selectedCafe.id);
       loadOrders(selectedCafe.id);
 
@@ -316,7 +428,9 @@ export default function AdminPanel() {
       logo_url: finalLogoUrl,
       theme_color: cafeThemeColor,
       table_count: parseInt(cafeTableCount) || 10,
-      admin_password: cafeAdminPassword || 'admin123'
+      admin_password: cafeAdminPassword || 'admin123',
+      phone: cafePhone,
+      footer_message: cafeFooterMsg
     };
 
     const created = await createCafe(newCafe);
@@ -332,6 +446,8 @@ export default function AdminPanel() {
       setCafeThemeColor('#00f2fe');
       setCafeTableCount(10);
       setCafeAdminPassword('');
+      setCafePhone('');
+      setCafeFooterMsg('');
     }
   };
 
@@ -366,7 +482,11 @@ export default function AdminPanel() {
       is_available: itemAvailable,
       is_veg: itemIsVeg,
       portion_options: portionsList,
-      image_url: finalImageUrl
+      image_url: finalImageUrl,
+      stock: itemStock.trim() !== '' ? parseInt(itemStock) : null,
+      low_stock_threshold: itemLowStockThreshold.trim() !== '' ? parseInt(itemLowStockThreshold) : null,
+      stock_unit: itemStockUnit || 'pcs',
+      recipe: recipeList
     };
 
     const created = await createMenuItem(newItem);
@@ -382,6 +502,12 @@ export default function AdminPanel() {
       setPortionInput('');
       setItemFile(null);
       setItemPreview('');
+      setItemStock('');
+      setItemLowStockThreshold('');
+      setItemStockUnit('pcs');
+      setRecipeList([]);
+      setSelectedRecipeIngId('');
+      setRecipeQtyInput('');
     }
   };
 
@@ -441,15 +567,53 @@ export default function AdminPanel() {
     }
   };
 
+  const deductIngredientsForOrderItem = (menuItem, quantity) => {
+    if (!menuItem.recipe || !Array.isArray(menuItem.recipe)) return;
+    
+    const saved = localStorage.getItem('raw_ingredients_inventory');
+    if (!saved) return;
+    
+    let rawList = JSON.parse(saved);
+    let updated = false;
+
+    for (const step of menuItem.recipe) {
+      rawList = rawList.map(ing => {
+        if (ing.id === parseInt(step.ingredientId)) {
+          updated = true;
+          return { ...ing, stock: Math.max(0, ing.stock - (parseFloat(step.quantity) * quantity)) };
+        }
+        return ing;
+      });
+    }
+
+    if (updated) {
+      localStorage.setItem('raw_ingredients_inventory', JSON.stringify(rawList));
+      setRawIngredients(rawList); // Update state directly
+      window.dispatchEvent(new Event('storage'));
+    }
+  };
+
   const handleCreateTestOrder = async (e) => {
     e.preventDefault();
     if (!selectedCafe) return;
+
+    // Check stock for each selected item
+    for (const si of selectedItems) {
+      if (si.item.stock !== undefined && si.item.stock !== null && si.quantity > si.item.stock) {
+        showAdminAlert(`❌ Stock shortage: Only ${si.item.stock} of ${si.item.name} remaining.`);
+        return;
+      }
+    }
 
     let itemsStr = '';
     let total = 0;
 
     if (selectedItems.length > 0) {
-      itemsStr = selectedItems.map(si => `${si.quantity}x ${si.item.name}`).join(', ');
+      itemsStr = selectedItems.map(si => {
+        const portion = selectedPortionsSim[si.item.id] || (si.item.portion_options && si.item.portion_options[0]) || '';
+        const portionText = portion ? ` (${portion})` : '';
+        return `${si.quantity}x ${si.item.name}${portionText}`;
+      }).join(', ');
       total = selectedItems.reduce((acc, si) => acc + (si.item.price * si.quantity), 0);
     } else if (customOrderText.trim()) {
       itemsStr = customOrderText;
@@ -469,10 +633,31 @@ export default function AdminPanel() {
 
     const created = await createOrder(newOrder);
     if (created) {
+      // Deduct stock
+      for (const si of selectedItems) {
+        if (si.item.stock !== undefined && si.item.stock !== null) {
+          const newStock = Math.max(0, si.item.stock - si.quantity);
+          await updateMenuItem(si.item.id, { stock: newStock });
+        }
+        // Deduct raw ingredients mapping
+        deductIngredientsForOrderItem(si.item, si.quantity);
+      }
+
+      // Update menuItems list locally
+      setMenuItems(prev => prev.map(m => {
+        const si = selectedItems.find(x => x.item.id === m.id);
+        if (si && m.stock !== undefined && m.stock !== null) {
+          return { ...m, stock: Math.max(0, m.stock - si.quantity) };
+        }
+        return m;
+      }));
+
       setOrders(prev => [created, ...prev]);
       setOrderTable('');
       setSelectedItems([]);
+      setSelectedPortionsSim({});
       setCustomOrderText('');
+      setSelectedOrderForBill(created); // Open printable invoice immediately!
     }
   };
 
@@ -503,6 +688,35 @@ export default function AdminPanel() {
     const success = await deleteOrder(id);
     if (success) {
       setOrders(prev => prev.filter(o => o.id !== id));
+    }
+  };
+
+  const handleApproveBillWithDetails = async (orderId, applyDiscount, discountPct, finalTotal) => {
+    const order = orders.find(o => o.id === orderId);
+    if (!order) return;
+
+    let updatedItemsText = order.items;
+    updatedItemsText = updatedItemsText
+      .replace(/\n\[🎟️.*\]/g, '')
+      .replace(/\n\[🎁.*\]/g, '')
+      .replace(/\n\[❌.*\]/g, '');
+
+    if (applyDiscount) {
+      updatedItemsText += `\n[🎁 ${discountPct}% Discount Applied]`;
+    } else {
+      updatedItemsText += `\n[❌ Discount Revoked/Not Applied]`;
+    }
+
+    const updated = await updateOrder(orderId, {
+      status: 'bill_approved',
+      total_price: finalTotal,
+      items: updatedItemsText
+    });
+
+    if (updated) {
+      setOrders(prev => prev.map(o => o.id === orderId ? updated : o));
+      setSelectedOrderForBill(null);
+      showAdminAlert('Bill approved and closed successfully!');
     }
   };
 
@@ -726,6 +940,12 @@ export default function AdminPanel() {
           >
             📊 Sales Report
           </button>
+          <button
+            className={`tab-btn ${activeTab === 'raw_inventory' ? 'active' : ''}`}
+            onClick={() => setActiveTab('raw_inventory')}
+          >
+            📦 Raw Inventory
+          </button>
         </div>
       </div>
 
@@ -904,11 +1124,12 @@ export default function AdminPanel() {
                               <th>Total</th>
                               <th>Status</th>
                               <th>Date</th>
+                              <th>Action</th>
                             </tr>
                           </thead>
                           <tbody>
                             {filtered.length === 0 ? (
-                              <tr><td colSpan="6" className="sales-empty-row">No orders found for this period.</td></tr>
+                              <tr><td colSpan="7" className="sales-empty-row">No orders found for this period.</td></tr>
                             ) : (
                               filtered.slice(0, 20).map(o => (
                                 <tr key={o.id}>
@@ -918,6 +1139,16 @@ export default function AdminPanel() {
                                   <td className="total-cell">{formatPrice(o.total_price || 0)}</td>
                                   <td><span className={`status-pill status-${o.status}`}>{o.status}</span></td>
                                   <td className="date-cell">{new Date(o.created_at).toLocaleDateString()}</td>
+                                  <td>
+                                    <button
+                                      type="button"
+                                      className="btn-select"
+                                      onClick={() => setSelectedOrderForBill(o)}
+                                      style={{ padding: '4px 8px', fontSize: '0.75rem', margin: 0, background: '#3b82f6', color: 'white' }}
+                                    >
+                                      🖨️ Bill
+                                    </button>
+                                  </td>
                                 </tr>
                               ))
                             )}
@@ -936,6 +1167,132 @@ export default function AdminPanel() {
                 <p>⚠️ Please select a cafe from the Cafes tab to view sales data.</p>
               </div>
             )}
+          </div>
+        )}
+
+        {/* RAW INVENTORY TAB */}
+        {activeTab === 'raw_inventory' && (
+          <div className="pane-layout">
+            {/* Left side: Add Raw Ingredient Form */}
+            <div className="form-card glass-card">
+              <h2>📦 Add Raw Ingredient</h2>
+              <p className="admin-sub">Add bulk ingredients or raw inventory items (like Flour, Cigarette cartons, or Beverage boxes) to track overall restaurant stock levels.</p>
+              <form onSubmit={handleAddRawIngredient}>
+                <div className="form-group">
+                  <label>Ingredient / Raw Item Name *</label>
+                  <input 
+                    type="text" 
+                    placeholder="e.g. Flour / Maida" 
+                    value={rawName}
+                    onChange={(e) => setRawName(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Current Stock Quantity *</label>
+                  <input 
+                    type="number" 
+                    step="any"
+                    placeholder="e.g. 5" 
+                    value={rawStock}
+                    onChange={(e) => setRawStock(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Low Stock Warning Threshold *</label>
+                  <input 
+                    type="number" 
+                    step="any"
+                    placeholder="e.g. 2" 
+                    value={rawThreshold}
+                    onChange={(e) => setRawThreshold(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Stock Unit *</label>
+                  <select value={rawUnit} onChange={(e) => setRawUnit(e.target.value)}>
+                    <option value="KG">Kilogram (KG)</option>
+                    <option value="Litres">Litres (L)</option>
+                    <option value="packs">Packs / Cartons</option>
+                    <option value="bottles">Bottles</option>
+                    <option value="bags">Bags / Sacks</option>
+                    <option value="pcs">Pieces (Pcs)</option>
+                  </select>
+                </div>
+                <button type="submit" className="btn-primary" style={{ width: '100%', marginTop: '10px' }}>
+                  📦 Add to Raw Inventory
+                </button>
+              </form>
+            </div>
+
+            {/* Right side: Raw Inventory List */}
+            <div className="list-card glass-card">
+              <h2>Inventory Status & Ingredient Control</h2>
+              {rawIngredients.length === 0 ? (
+                <div className="empty-state">
+                  <p>No raw ingredients in inventory. Register some items on the left!</p>
+                </div>
+              ) : (
+                <div className="menu-list-grid">
+                  {rawIngredients.map(item => {
+                    const initial = item.initial_stock !== undefined ? item.initial_stock : item.stock;
+                    const used = Math.max(0, initial - item.stock);
+                    const isLow = item.stock <= item.low_stock_threshold;
+                    return (
+                      <div key={item.id} className="menu-item-row" style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '16px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                          <div>
+                            <h3 style={{ margin: '0 0 4px 0', fontSize: '1.1rem', color: 'var(--text-heading)' }}>📦 {item.name}</h3>
+                            <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                              Low Threshold Alert: <strong style={{ color: '#f59e0b' }}>{formatIngredientQty(item.low_stock_threshold, item.unit)}</strong>
+                            </p>
+                          </div>
+                          <div>
+                            {item.stock === 0 ? (
+                              <span className="stock-badge danger">Out of Stock</span>
+                            ) : isLow ? (
+                              <span className="stock-badge warning" style={{ animation: 'pulseLowStock 1.5s infinite alternate' }}>
+                                Low Stock: {formatIngredientQty(item.stock, item.unit)} / {formatIngredientQty(initial, item.unit)} ({formatIngredientQty(used, item.unit)} used)
+                              </span>
+                            ) : (
+                              <span className="stock-badge normal">
+                                {formatIngredientQty(item.stock, item.unit)} / {formatIngredientQty(initial, item.unit)} ({formatIngredientQty(used, item.unit)} used)
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Inventory adjustments */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '10px', marginTop: '4px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Update Stock:</span>
+                            <input 
+                              type="number" 
+                              step="any"
+                              value={item.stock}
+                              onChange={(e) => handleUpdateRawStock(item.id, e.target.value)}
+                              style={{ width: '80px', padding: '4px 8px', margin: 0, background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '6px', color: 'white', fontWeight: 'bold' }}
+                            />
+                            <span style={{ fontSize: '0.85rem' }}>{item.unit}</span>
+                          </div>
+                          
+                          <button 
+                            type="button"
+                            className="btn-confirm-yes"
+                            onClick={() => setRawItemToDelete(item)}
+                            style={{ padding: '6px 12px', fontSize: '0.75rem', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '6px', cursor: 'pointer' }}
+                          >
+                            🗑️ Delete
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -972,6 +1329,24 @@ export default function AdminPanel() {
                     onChange={(e) => setCafeDescription(e.target.value)}
                     rows="3"
                   ></textarea>
+                </div>
+                <div className="form-group">
+                  <label>Contact Phone Number</label>
+                  <input 
+                    type="text" 
+                    placeholder="e.g. +977-1-5551234 or +1-555-0199" 
+                    value={cafePhone} 
+                    onChange={(e) => setCafePhone(e.target.value)} 
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Bill Footer Message</label>
+                  <input 
+                    type="text" 
+                    placeholder="e.g. Thank You For Dining With Us!" 
+                    value={cafeFooterMsg} 
+                    onChange={(e) => setCafeFooterMsg(e.target.value)} 
+                  />
                 </div>
                 <div className="form-group">
                   <label>Tables Count *</label>
@@ -1149,9 +1524,9 @@ export default function AdminPanel() {
               <div className="pane-left-column">
                 {/* Discount Configuration Card */}
                 <div className="form-card glass-card" style={{ marginBottom: '20px' }}>
-                  <h2>🎁 Global Cafe Discount Settings</h2>
-                  <p className="admin-sub">Set an automatic discount when customers upload photos and meet a minimum item count.</p>
-                  <form onSubmit={handleUpdateDiscount} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '16px', alignItems: 'end', marginTop: '16px' }}>
+                  <h2>🎁 Global Cafe Settings & Bill Branding</h2>
+                  <p className="admin-sub">Customize invoice details, phone numbers, and automatic discount rules for <strong>{menuTargetCafe?.name || selectedCafe?.name}</strong>.</p>
+                  <form onSubmit={handleUpdateDiscount} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '16px' }}>
                     <div className="form-group" style={{ margin: 0 }}>
                       <label>Minimum Items</label>
                       <input 
@@ -1171,8 +1546,26 @@ export default function AdminPanel() {
                         onChange={(e) => setDiscountPercentage(e.target.value)}
                       />
                     </div>
-                    <button type="submit" className="btn-primary" style={{ height: '48px', margin: 0 }}>
-                      Save Settings
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label>Contact Phone Number</label>
+                      <input 
+                        type="text" 
+                        placeholder="e.g. +977-1-5551234"
+                        value={discountPhone} 
+                        onChange={(e) => setDiscountPhone(e.target.value)}
+                      />
+                    </div>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label>Bill Footer Message</label>
+                      <input 
+                        type="text" 
+                        placeholder="e.g. Thank You For Dining With Us!"
+                        value={discountFooterMsg} 
+                        onChange={(e) => setDiscountFooterMsg(e.target.value)}
+                      />
+                    </div>
+                    <button type="submit" className="btn-primary" style={{ height: '48px', gridColumn: 'span 2', marginTop: '8px' }}>
+                      💾 Save Settings & Branding
                     </button>
                   </form>
                 </div>
@@ -1197,6 +1590,8 @@ export default function AdminPanel() {
                               setMenuTargetCafe(cafe);
                               setDiscountMinItems(cafe.discount_min_items || 0);
                               setDiscountPercentage(cafe.discount_percentage || 0);
+                              setDiscountPhone(cafe.phone || '');
+                              setDiscountFooterMsg(cafe.footer_message || '');
                               loadMenuItems(cafe.id);
                             }}
                           >
@@ -1350,6 +1745,146 @@ export default function AdminPanel() {
                     </div>
                   </div>
 
+                  {/* Stock Tracking Form Fields */}
+                  <div className="form-group-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '15px' }}>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label>Stock Qty (Optional)</label>
+                      <input 
+                        type="number" 
+                        placeholder="e.g. 50" 
+                        min="0"
+                        value={itemStock} 
+                        onChange={(e) => setItemStock(e.target.value)} 
+                      />
+                    </div>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label>Alert Threshold</label>
+                      <input 
+                        type="number" 
+                        placeholder="e.g. 5" 
+                        min="0"
+                        value={itemLowStockThreshold} 
+                        onChange={(e) => setItemLowStockThreshold(e.target.value)} 
+                      />
+                    </div>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label>Stock Unit</label>
+                      <select value={itemStockUnit} onChange={(e) => setItemStockUnit(e.target.value)}>
+                        <option value="pcs">pcs (pieces)</option>
+                        <option value="bottles">bottles</option>
+                        <option value="KG">KG (kilograms)</option>
+                        <option value="packs">packs</option>
+                        <option value="servings">servings</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Recipe Ingredient Mapping Form Panel */}
+                  <div className="form-group" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', padding: '16px', marginBottom: '15px' }}>
+                    <label style={{ fontSize: '0.9rem', fontWeight: '700', color: 'var(--text-heading)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                      🥗 Raw Ingredient Recipe Mapping (Optional)
+                    </label>
+                    <p style={{ margin: '0 0 12px 0', fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+                      Link this menu item to raw ingredients. When ordered, it will automatically deduct from raw inventory.
+                    </p>
+                    
+                    <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr auto', gap: '8px', alignItems: 'end' }}>
+                      <div className="form-group" style={{ margin: 0 }}>
+                        <label style={{ fontSize: '0.75rem' }}>Select Ingredient</label>
+                        <select 
+                          value={selectedRecipeIngId} 
+                          onChange={(e) => setSelectedRecipeIngId(e.target.value)}
+                          style={{ padding: '6px 10px', fontSize: '0.85rem' }}
+                        >
+                          <option value="">-- Choose --</option>
+                          {rawIngredients.map(ing => (
+                            <option key={ing.id} value={ing.id}>{ing.name} ({ing.unit})</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="form-group" style={{ margin: 0 }}>
+                        <label style={{ fontSize: '0.75rem' }}>Qty Consumed</label>
+                        <input 
+                          type="number" 
+                          step="any"
+                          placeholder="e.g. 0.1" 
+                          value={recipeQtyInput}
+                          onChange={(e) => setRecipeQtyInput(e.target.value)}
+                          style={{ padding: '6px 10px', fontSize: '0.85rem' }}
+                        />
+                      </div>
+                      <button 
+                        type="button" 
+                        className="btn-select"
+                        onClick={() => {
+                          if (!selectedRecipeIngId || !recipeQtyInput.trim()) return;
+                          const qty = parseFloat(recipeQtyInput);
+                          if (isNaN(qty) || qty <= 0) return;
+                          const ing = rawIngredients.find(r => r.id === parseInt(selectedRecipeIngId));
+                          if (!ing) return;
+                          
+                          if (recipeList.some(r => r.ingredientId === ing.id)) {
+                            showAdminAlert('Ingredient already linked to this item!');
+                            return;
+                          }
+                          
+                          setRecipeList(prev => [...prev, {
+                            ingredientId: ing.id,
+                            name: ing.name,
+                            quantity: qty,
+                            unit: ing.unit
+                          }]);
+                          setSelectedRecipeIngId('');
+                          setRecipeQtyInput('');
+                        }}
+                        style={{ height: '36px', padding: '0 12px', fontSize: '0.85rem', fontWeight: 'bold' }}
+                      >
+                        ＋ Link
+                      </button>
+                    </div>
+
+                    {/* Mapped list display */}
+                    {recipeList.length > 0 && (
+                      <div style={{ marginTop: '12px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                        {recipeList.map(step => (
+                          <span 
+                            key={step.ingredientId} 
+                            style={{ 
+                              background: 'rgba(124, 58, 237, 0.15)', 
+                              border: '1px solid rgba(124, 58, 237, 0.3)', 
+                              color: '#c084fc', 
+                              fontSize: '0.75rem', 
+                              padding: '4px 8px', 
+                              borderRadius: '20px', 
+                              display: 'inline-flex', 
+                              alignItems: 'center', 
+                              gap: '6px' 
+                            }}
+                          >
+                            ⚙️ {step.name}: <strong>{step.quantity} {step.unit}</strong>
+                            <button 
+                              type="button" 
+                              onClick={() => setRecipeList(prev => prev.filter(r => r.ingredientId !== step.ingredientId))}
+                              style={{ 
+                                background: 'transparent', 
+                                border: 'none', 
+                                color: '#ef4444', 
+                                cursor: 'pointer', 
+                                fontSize: '0.85rem', 
+                                padding: 0, 
+                                display: 'inline-flex', 
+                                alignItems: 'center',
+                                marginLeft: '4px'
+                              }}
+                            >
+                              ×
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
                   <div className="form-group checkbox-group" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '8px', cursor: 'pointer', marginTop: '10px', marginBottom: '15px' }}>
                     <input 
                       type="checkbox" 
@@ -1398,11 +1933,34 @@ export default function AdminPanel() {
                             <span className="menu-item-price">{formatPrice(item.price)}</span>
                           </div>
                           {item.description && <p className="menu-item-desc">{item.description}</p>}
+                          {/* Stock status indicator */}
+                          <div style={{ marginTop: '5px', marginBottom: '5px' }}>
+                            {item.stock !== undefined && item.stock !== null ? (
+                              item.stock === 0 ? (
+                                <span className="stock-badge danger">Out of Stock</span>
+                              ) : item.stock <= (item.low_stock_threshold || 10) ? (
+                                <span className="stock-badge warning">Low Stock: {item.stock} {item.stock_unit}</span>
+                              ) : (
+                                <span className="stock-badge normal">Stock: {item.stock} {item.stock_unit}</span>
+                              )
+                            ) : (
+                              <span className="stock-badge normal" style={{ opacity: 0.6 }}>Stock: Unlimited</span>
+                            )}
+                          </div>
                           <div className="item-portions-list">
                             {item.portion_options && item.portion_options.map(p => (
                               <span key={p} className="portion-badge-preview">{p}</span>
                             ))}
                           </div>
+                          {item.recipe && Array.isArray(item.recipe) && item.recipe.length > 0 && (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '6px' }}>
+                              {item.recipe.map(r => (
+                                <span key={r.ingredientId} style={{ fontSize: '0.7rem', background: 'rgba(255,255,255,0.05)', color: '#c084fc', padding: '2px 6px', borderRadius: '4px', border: '1px dashed rgba(124, 58, 237, 0.2)' }}>
+                                  ⚙️ consumes {formatIngredientQty(r.quantity, r.unit)} of {r.name}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                           <span className={`category-tag tag-${item.category.toLowerCase()}`}>{item.category}</span>
                         </div>
                         <div className="menu-item-actions">
@@ -1568,19 +2126,45 @@ export default function AdminPanel() {
                         {menuItems.map(item => {
                           const selected = selectedItems.find(si => si.item.id === item.id);
                           return (
-                            <div key={item.id} className="sim-item-row">
-                              <span className={item.is_available ? '' : 'text-muted-strike'}>
-                                {item.name} ({formatPrice(item.price)})
-                                {!item.is_available && ' (Out of stock)'}
-                              </span>
-                              <input 
-                                type="number" 
-                                min="0" 
-                                placeholder="0" 
-                                value={selected ? selected.quantity : ''}
-                                onChange={(e) => handleSelectItemChange(item, e.target.value)}
-                                disabled={!item.is_available}
-                              />
+                            <div key={item.id} className="sim-item-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                <span className={item.is_available && item.stock !== 0 ? '' : 'text-muted-strike'}>
+                                  {item.name} ({formatPrice(item.price)})
+                                  {!item.is_available && ' (Out of stock)'}
+                                  {item.is_available && item.stock === 0 && ' (Sold out)'}
+                                </span>
+                                {item.stock !== undefined && item.stock !== null && (
+                                  <span style={{ fontSize: '0.75rem', color: item.stock <= (item.low_stock_threshold || 10) ? '#f59e0b' : '#9ca3af' }}>
+                                    Remaining Stock: {item.stock} {item.stock_unit}
+                                  </span>
+                                )}
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                {item.portion_options && item.portion_options.length > 0 && (
+                                  <select
+                                    value={selectedPortionsSim[item.id] || item.portion_options[0]}
+                                    onChange={(e) => setSelectedPortionsSim({
+                                      ...selectedPortionsSim,
+                                      [item.id]: e.target.value
+                                    })}
+                                    style={{ padding: '4px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.15)', color: 'white', borderRadius: '6px', fontSize: '0.8rem' }}
+                                    disabled={!item.is_available || item.stock === 0}
+                                  >
+                                    {item.portion_options.map(p => (
+                                      <option key={p} value={p}>{p}</option>
+                                    ))}
+                                  </select>
+                                )}
+                                <input 
+                                  type="number" 
+                                  min="0" 
+                                  placeholder="0" 
+                                  value={selected ? selected.quantity : ''}
+                                  onChange={(e) => handleSelectItemChange(item, e.target.value)}
+                                  disabled={!item.is_available || item.stock === 0}
+                                  style={{ width: '60px', padding: '4px 6px', margin: 0 }}
+                                />
+                              </div>
                             </div>
                           );
                         })}
@@ -1630,6 +2214,15 @@ export default function AdminPanel() {
                           <p className="order-total">Total: {formatPrice(order.total_price || 0)}</p>
                         </div>
                         <div className="order-card-actions">
+                          {order.status !== 'cancelled' && (
+                            <button 
+                              className="btn-status-progress"
+                              onClick={() => setSelectedOrderForBill(order)}
+                              style={{ background: '#3b82f6', color: 'white' }}
+                            >
+                              🖨️ Bill / Print
+                            </button>
+                          )}
                           {order.status !== 'completed' && order.status !== 'cancelled' && (
                             <button 
                               className="btn-status-progress"
@@ -1695,6 +2288,342 @@ export default function AdminPanel() {
             </div>
           )
         )}
+      </div>
+      
+      {/* Print Bill Modal overlay */}
+      {selectedOrderForBill && (
+        <PrintBillModal
+          order={selectedOrderForBill}
+          cafe={selectedCafe}
+          menuItems={menuItems}
+          formatPrice={formatPrice}
+          onClose={() => setSelectedOrderForBill(null)}
+          onApproveDiscount={handleApproveBillWithDetails}
+        />
+      )}
+
+      {/* Delete Raw Ingredient Confirmation Modal Popup */}
+      {rawItemToDelete && (
+        <div className="bill-modal-overlay animated-fade-in no-print" onClick={() => setRawItemToDelete(null)}>
+          <div className="bill-modal-card glass-card animated-zoom-in" onClick={(e) => e.stopPropagation()} style={{ background: '#111827', color: 'white', maxWidth: '400px', border: '1px solid rgba(255,255,255,0.1)' }}>
+            
+            {/* Modal Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.1)', padding: '16px 20px' }}>
+              <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px', color: '#ef4444', fontSize: '1.1rem', fontWeight: 'bold' }}>
+                ⚠️ Confirm Deletion
+              </h3>
+              <button 
+                type="button" 
+                onClick={() => setRawItemToDelete(null)}
+                style={{ background: 'transparent', border: 'none', color: '#9ca3af', fontSize: '1.25rem', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 0 }}
+                title="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: '20px' }}>
+              <p style={{ margin: '0 0 16px 0', fontSize: '0.95rem', color: '#d1d5db', lineHeight: '1.5', textAlign: 'left' }}>
+                Are you sure you really want to delete the raw ingredient <strong style={{ color: 'white' }}>{rawItemToDelete.name}</strong> from your inventory?
+              </p>
+              <p style={{ margin: 0, fontSize: '0.8rem', color: '#9ca3af', lineHeight: '1.4', textAlign: 'left' }}>
+                This will permanently remove this ingredient and break any menu item recipes currently linked to it.
+              </p>
+            </div>
+
+            {/* Modal Footer / CTAs */}
+            <div style={{ padding: '0 20px 20px 20px', display: 'flex', gap: '12px' }}>
+              <button 
+                type="button"
+                className="btn-primary" 
+                onClick={() => {
+                  handleDeleteRawIngredient(rawItemToDelete.id);
+                  setRawItemToDelete(null);
+                }}
+                style={{ flex: 1, background: '#ef4444', color: 'white', height: '44px', margin: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                Yes, Delete
+              </button>
+              <button 
+                type="button"
+                className="btn-select" 
+                onClick={() => setRawItemToDelete(null)}
+                style={{ flex: 1, border: '1px solid rgba(255,255,255,0.15)', height: '44px', margin: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', background: 'transparent' }}
+              >
+                No, Keep It
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── PRINT RECEIPT BILL MODAL COMPONENT ──────────────────────────────────────────
+export function PrintBillModal({ order, cafe, menuItems, formatPrice, onClose, onApproveDiscount, isWaiter = false }) {
+  const [taxRate, setTaxRate] = useState(
+    cafe?.currency === 'INR' ? 5 :
+    cafe?.currency === 'NPR' ? 13 : 8
+  );
+  const [taxType, setTaxType] = useState(
+    cafe?.currency === 'INR' ? 'GST' :
+    cafe?.currency === 'NPR' ? 'VAT' : 'Sales Tax'
+  );
+  
+  // Parse items
+  const parsedItems = [];
+  const regex = /(\d+)x\s+([^,\n\(\[)]+)(?:\s*\(([^)]+)\))?/g;
+  let match;
+  const itemsText = order.items || '';
+  let foundAny = false;
+  
+  while ((match = regex.exec(itemsText)) !== null) {
+    const qty = parseInt(match[1]);
+    const name = match[2].trim();
+    const portion = match[3] ? match[3].trim() : null;
+    
+    const menuItem = menuItems.find(m => m.name.toLowerCase() === name.toLowerCase());
+    parsedItems.push({
+      qty,
+      name,
+      portion,
+      price: menuItem ? menuItem.price : (order.total_price / qty),
+      total: menuItem ? (menuItem.price * qty) : order.total_price
+    });
+    if (menuItem) foundAny = true;
+  }
+  
+  // Calculate subtotal
+  let subtotal = 0;
+  if (foundAny) {
+    subtotal = parsedItems.reduce((acc, pi) => acc + pi.total, 0);
+  } else {
+    subtotal = order.total_price;
+    // back-calculate if discount was applied
+    if (itemsText.includes('Discount Applied')) {
+      const discountPercent = cafe?.discount_percentage || 20;
+      subtotal = subtotal / (1 - (discountPercent / 100));
+    } else if (itemsText.includes('Voucher Applied')) {
+      subtotal = subtotal / 0.80;
+    }
+  }
+
+  // Discount toggles
+  const hasDiscountInText = itemsText.includes('Discount Applied') || itemsText.includes('Voucher Applied');
+  const [isDiscountApplied, setIsDiscountApplied] = useState(hasDiscountInText);
+  const [discountPercent, setDiscountPercent] = useState(() => {
+    if (itemsText.includes('Voucher Applied')) return 20;
+    return cafe?.discount_percentage || 20;
+  });
+
+  // UGC Verification check
+  const isUgcDiscountClaimed = itemsText.includes('UGC Discount Applied') || 
+    (cafe?.discount_min_items > 0 && parsedItems.reduce((acc, pi) => acc + pi.qty, 0) >= cafe?.discount_min_items);
+  const hasUploadedPhotos = order.bill_photos && JSON.parse(order.bill_photos).length > 0;
+  const isUgcMismatch = isUgcDiscountClaimed && !hasUploadedPhotos;
+
+  const handleRevokeDiscount = () => {
+    setIsDiscountApplied(false);
+  };
+
+  // Re-compute calculations
+  const discountAmount = isDiscountApplied ? (subtotal * (discountPercent / 100)) : 0;
+  const priceAfterDiscount = subtotal - discountAmount;
+  const taxAmount = priceAfterDiscount * (taxRate / 100);
+  const grandTotal = priceAfterDiscount + taxAmount;
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  return (
+    <div className="bill-modal-overlay animated-fade-in" onClick={onClose}>
+      <div className="bill-modal-card glass-card animated-zoom-in" onClick={(e) => e.stopPropagation()} style={{ background: '#111827', color: 'white', border: '1px solid rgba(255,255,255,0.1)' }}>
+        <div className="bill-modal-body" style={{ maxHeight: '75vh', overflowY: 'auto' }}>
+          
+          {/* UGC warning panel */}
+          {isUgcMismatch && isDiscountApplied && (
+            <div className="bill-ugc-warning-banner">
+              <span>⚠️ <strong>UGC Warning:</strong> Applied discount but uploaded <strong>0 photos</strong>.</span>
+              <button type="button" onClick={handleRevokeDiscount}>Revoke Discount</button>
+            </div>
+          )}
+
+          {/* Printable Bill Wrapper */}
+          <div className="printable-bill-wrapper">
+            <div className="bill-header">
+              <h1>{cafe?.name || 'Cafe & Restro'}</h1>
+              {cafe?.description && <p>{cafe.description}</p>}
+              {cafe?.location && <p>Branch: {cafe.location}</p>}
+              {cafe?.phone && <p>Ph: {cafe.phone}</p>}
+            </div>
+            
+            <div className="bill-meta">
+              <div className="bill-meta-row">
+                <span><strong>Invoice:</strong> #BILL-{order.id.toString().slice(-4)}</span>
+                <span><strong>Date:</strong> {new Date(order.created_at || Date.now()).toLocaleDateString()}</span>
+              </div>
+              <div className="bill-meta-row">
+                <span><strong>Table:</strong> {order.table_number}</span>
+                <span><strong>Time:</strong> {new Date(order.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+              </div>
+              <div className="bill-meta-row">
+                <span><strong>Staff:</strong> {isWaiter ? 'Waiter Service' : 'Admin'}</span>
+                <span><strong>Status:</strong> {order.status.toUpperCase()}</span>
+              </div>
+            </div>
+
+            <table className="bill-table">
+              <thead>
+                <tr>
+                  <th>Item Description</th>
+                  <th className="num-col" style={{ width: '40px' }}>Qty</th>
+                  <th className="num-col" style={{ width: '70px' }}>Rate</th>
+                  <th className="num-col" style={{ width: '80px' }}>Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {parsedItems.length > 0 ? (
+                  parsedItems.map((pi, idx) => (
+                    <tr key={idx}>
+                      <td>
+                        {pi.name}
+                        {pi.portion && <span style={{ fontSize: '0.75rem', display: 'block', color: '#6b7280' }}>({pi.portion})</span>}
+                      </td>
+                      <td className="num-col">{pi.qty}</td>
+                      <td className="num-col">{formatPrice(pi.price)}</td>
+                      <td className="num-col">{formatPrice(pi.total)}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td>{order.items}</td>
+                    <td className="num-col">1</td>
+                    <td className="num-col">{formatPrice(subtotal)}</td>
+                    <td className="num-col">{formatPrice(subtotal)}</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+
+            <div className="bill-totals">
+              <div className="bill-totals-row">
+                <span>Subtotal</span>
+                <span>{formatPrice(subtotal)}</span>
+              </div>
+              
+              {isDiscountApplied && (
+                <div className="bill-totals-row" style={{ color: '#ef4444' }}>
+                  <span>Discount ({discountPercent}%)</span>
+                  <span>-{formatPrice(discountAmount)}</span>
+                </div>
+              )}
+
+              <div className="bill-totals-row">
+                <span>
+                  {taxType} ({taxRate}%)
+                  {taxType === 'GST' && <span style={{ fontSize: '0.7rem', display: 'block', color: '#4b5563' }}>(CGST {taxRate/2}%, SGST {taxRate/2}%)</span>}
+                </span>
+                <span>{formatPrice(taxAmount)}</span>
+              </div>
+
+              <div className="bill-totals-row grand-total">
+                <span>NET PAYABLE</span>
+                <span>{formatPrice(grandTotal)}</span>
+              </div>
+            </div>
+
+            <div className="bill-footer">
+              <p>{cafe?.footer_message || 'Thank You For Dining With Us!'}</p>
+              <p>Powered by Antigravity QR Menu SaaS</p>
+            </div>
+          </div>
+
+          {/* Interactive Controls Overlay for Waiter/Admin (Hidden during print) */}
+          <div className="bill-controls-box">
+            <h3>⚙️ Bill Customization Settings</h3>
+            
+            <div className="bill-control-group">
+              <span className="bill-control-label">Tax Country Scheme:</span>
+              <select 
+                className="bill-control-input"
+                value={`${taxType}-${taxRate}`} 
+                onChange={(e) => {
+                  const [type, rate] = e.target.value.split('-');
+                  setTaxType(type);
+                  setTaxRate(parseFloat(rate));
+                }}
+              >
+                <option value="Sales Tax-8">United States (8% Sales Tax)</option>
+                <option value="GST-5">India GST (5% standard)</option>
+                <option value="GST-18">India GST (18% fine-dine)</option>
+                <option value="VAT-13">Nepal VAT (13% VAT)</option>
+                <option value="No Tax-0">Exempt / No Tax (0%)</option>
+              </select>
+            </div>
+
+            <div className="bill-control-group">
+              <span className="bill-control-label">
+                <input 
+                  type="checkbox" 
+                  checked={isDiscountApplied}
+                  onChange={(e) => setIsDiscountApplied(e.target.checked)}
+                  style={{ width: '16px', height: '16px', cursor: 'pointer', margin: '0 6px 0 0' }}
+                />
+                Apply Discount
+              </span>
+              {isDiscountApplied && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <input 
+                    type="number" 
+                    min="0" 
+                    max="100" 
+                    value={discountPercent} 
+                    onChange={(e) => setDiscountPercent(Math.max(0, parseInt(e.target.value) || 0))}
+                    className="bill-control-input"
+                    style={{ width: '60px', padding: '4px' }}
+                  />
+                  <span>%</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="bill-actions-row">
+            <button 
+              type="button"
+              className="btn-primary" 
+              onClick={handlePrint}
+              style={{ background: '#3b82f6', color: 'white' }}
+            >
+              🖨️ Print Bill Receipt
+            </button>
+            
+            {onApproveDiscount && ['pending', 'preparing', 'ready', 'completed', 'bill_requested'].includes(order.status) && (
+              <button 
+                type="button"
+                className="btn-primary" 
+                onClick={() => onApproveDiscount(order.id, isDiscountApplied, discountPercent, grandTotal)}
+                style={{ background: '#10b981', color: 'white' }}
+              >
+                ✅ Approve & Close Order
+              </button>
+            )}
+
+            <button 
+              type="button"
+              className="btn-select" 
+              onClick={onClose}
+              style={{ border: '1px solid rgba(255,255,255,0.15)' }}
+            >
+              Close
+            </button>
+          </div>
+
+        </div>
       </div>
     </div>
   );
