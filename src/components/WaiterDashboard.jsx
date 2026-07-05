@@ -144,7 +144,7 @@ export default function WaiterDashboard() {
     }
   };
 
-  // Fetch initial cafes list
+  // Fetch initial cafes list and validate session cafe ID
   useEffect(() => {
     const loadInitialData = async () => {
       const data = await fetchCafes();
@@ -155,8 +155,17 @@ export default function WaiterDashboard() {
           const matched = data.find(c => String(c.id) === String(savedCafeId));
           if (matched) {
             setSelectedCafe(matched);
+          } else {
+            // Stale session cafe ID not found in database! Clear session to force re-login
+            console.warn("Saved waiter session cafe ID not found in active cafe list. Clearing stale session.");
+            localStorage.removeItem('waiter_session_name');
+            localStorage.removeItem('waiter_session_cafe_id');
+            setWaiterSession(null);
+            setSelectedCafe(null);
           }
         }
+      } else {
+        setSelectedCafe(null);
       }
     };
     loadInitialData();
@@ -250,7 +259,12 @@ export default function WaiterDashboard() {
         loadMenuItems(selectedCafe.id);
 
         if (payload.eventType === 'INSERT') {
-          setOrders(prev => [payload.new, ...prev]);
+          setOrders(prev => {
+            if (prev.some(order => String(order.id) === String(payload.new.id))) {
+              return prev;
+            }
+            return [payload.new, ...prev];
+          });
           if (payload.new.status === 'assistance_needed') {
             if (!isAudioMuted) {
               playAssistanceBuzz();
@@ -407,6 +421,56 @@ export default function WaiterDashboard() {
     const updated = await updateOrderStatus(orderId, 'cancelled');
     if (updated) {
       setOrders(prev => prev.map(o => o.id === orderId ? updated : o));
+    }
+  };
+
+  const handleDownloadPhoto = async (photoObj) => {
+    if (!photoObj || !photoObj.url) return;
+    const { url, order, index } = photoObj;
+    
+    // Format creation time
+    const orderTime = new Date(order.created_at || Date.now());
+    let hours = orderTime.getHours();
+    const minutes = String(orderTime.getMinutes()).padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    const timeStr = `${hours}:${minutes}${ampm}`;
+    const cleanTime = timeStr.replace(':', '-');
+    
+    // Determine extension
+    let ext = 'jpg';
+    if (url.includes('image/png')) ext = 'png';
+    else if (url.includes('image/gif')) ext = 'gif';
+    else if (url.includes('image/webp')) ext = 'webp';
+    else {
+      const match = url.match(/\.([a-zA-Z0-9]+)(?:[?#]|$)/);
+      if (match) ext = match[1];
+    }
+    
+    const fileName = `tableno${order.table_number || 'N/A'}_image${index + 1}_${cleanTime}_approved.${ext}`;
+    
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
+    } catch (e) {
+      console.warn("Could not download via fetch, falling back to direct anchor tag:", e);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      link.target = '_blank';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     }
   };
 
@@ -778,20 +842,20 @@ export default function WaiterDashboard() {
                     )}
 
                     {/* Render UGC experience photos */}
-                    {order.bill_photos && (
+                    {order.ugc_image && (
                       <div className="waiter-ugc-photos-section">
                         <span className="ugc-title">Customer Dining Photos:</span>
                         <div className="ugc-photos-grid">
                           {(() => {
                             try {
-                              const photos = JSON.parse(order.bill_photos);
+                              const photos = JSON.parse(order.ugc_image);
                               return photos.map((url, idx) => (
                                 <img 
                                   key={idx} 
                                   src={url} 
                                   alt="Dining Experience" 
                                   className="waiter-ugc-thumb" 
-                                  onClick={() => setFullscreenPhoto(url)}
+                                  onClick={() => setFullscreenPhoto({ url, order, index: idx })}
                                 />
                               ));
                             } catch (e) {
@@ -942,8 +1006,25 @@ export default function WaiterDashboard() {
       {fullscreenPhoto && (
         <div className="fullscreen-photo-overlay glass-blur animated-fade-in" onClick={() => setFullscreenPhoto(null)}>
           <div className="fullscreen-photo-modal" onClick={(e) => e.stopPropagation()}>
-            <img src={fullscreenPhoto} alt="Dining Experience Fullscreen Preview" className="fullscreen-photo-img" />
-            <button className="btn-close-photo" onClick={() => setFullscreenPhoto(null)}>✕ Close Preview</button>
+            <img src={fullscreenPhoto.url} alt="Dining Experience Fullscreen Preview" className="fullscreen-photo-img" />
+            <div className="fullscreen-photo-actions" style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginTop: '15px' }}>
+              <button 
+                type="button"
+                className="btn-primary" 
+                onClick={() => handleDownloadPhoto(fullscreenPhoto)}
+                style={{ background: '#10b981', color: 'white', display: 'flex', alignItems: 'center', gap: '6px', border: 'none', borderRadius: '8px', padding: '8px 16px', fontWeight: '600', cursor: 'pointer' }}
+              >
+                📥 Download Image
+              </button>
+              <button 
+                type="button"
+                className="btn-select" 
+                onClick={() => setFullscreenPhoto(null)} 
+                style={{ border: '1px solid rgba(255,255,255,0.15)', color: 'white', background: 'transparent', borderRadius: '8px', padding: '8px 16px', cursor: 'pointer' }}
+              >
+                ✕ Close Preview
+              </button>
+            </div>
           </div>
         </div>
       )}

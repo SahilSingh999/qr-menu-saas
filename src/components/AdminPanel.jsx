@@ -24,7 +24,8 @@ export default function AdminPanel() {
     uploadImage,
     fetchStaff,
     createStaff,
-    deleteStaff
+    deleteStaff,
+    validateActivationKey
   } = useSupabase();
 
   // State
@@ -41,6 +42,20 @@ export default function AdminPanel() {
   });
   const [loginPassword, setLoginPassword] = useState('');
   const [loginCafeId, setLoginCafeId] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showActivation, setShowActivation] = useState(false);
+  const [activationKeyInput, setActivationKeyInput] = useState('');
+  const [activatingCafe, setActivatingCafe] = useState(null);
+  const [onboardStep, setOnboardStep] = useState(1);
+  const [onboardName, setOnboardName] = useState('');
+  const [onboardDescription, setOnboardDescription] = useState('');
+  const [onboardLocation, setOnboardLocation] = useState('');
+  const [onboardPhone, setOnboardPhone] = useState('');
+  const [onboardLogoUrl, setOnboardLogoUrl] = useState('');
+  const [onboardLogoFile, setOnboardLogoFile] = useState(null);
+  const [onboardLogoPreview, setOnboardLogoPreview] = useState('');
+  const [onboardPassword, setOnboardPassword] = useState('');
+  const [onboardShowPassword, setOnboardShowPassword] = useState(false);
 
   // Staff States
   const [staffName, setStaffName] = useState('');
@@ -80,6 +95,84 @@ export default function AdminPanel() {
   const handleRemoveLogoPreview = () => {
     setLogoFile(null);
     setLogoPreview('');
+  };
+
+  const handleOnboardFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setOnboardLogoFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setOnboardLogoPreview(reader.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleRemoveOnboardLogo = () => {
+    setOnboardLogoFile(null);
+    setOnboardLogoPreview('');
+    setOnboardLogoUrl('');
+  };
+
+  const handleOnboardSubmit = async (e) => {
+    if (e) e.preventDefault();
+    if (!onboardPassword.trim()) {
+      setAdminAlertMsg('❌ Please enter a security password.');
+      return;
+    }
+    if (onboardPassword.trim().length < 4) {
+      setAdminAlertMsg('❌ Password must be at least 4 characters long.');
+      return;
+    }
+
+    setAdminAlertMsg('');
+    try {
+      let finalLogoUrl = onboardLogoUrl;
+
+      // 1. Upload custom logo file if selected
+      if (onboardLogoFile) {
+        const uploadedUrl = await uploadImage(onboardLogoFile, 'logos');
+        if (uploadedUrl) {
+          finalLogoUrl = uploadedUrl;
+        }
+      }
+
+      // 2. Perform the update in Supabase / LocalStorage mock
+      const payload = {
+        name: onboardName.trim(),
+        description: onboardDescription.trim(),
+        location: onboardLocation.trim(),
+        phone: onboardPhone.trim(),
+        logo_url: finalLogoUrl,
+        admin_password: onboardPassword.trim(),
+        is_activated: true
+      };
+
+      const updatedCafe = await updateCafe(activatingCafe.id, payload);
+
+      if (updatedCafe) {
+        // 3. Auto-login the owner
+        setAdminSession(updatedCafe.id);
+        setSelectedCafe(updatedCafe);
+        localStorage.setItem('admin_session_cafe_id', String(updatedCafe.id));
+
+        // 4. Reset activation states
+        setActivatingCafe(null);
+        setShowActivation(false);
+        setActivationKeyInput('');
+        setOnboardPassword('');
+        setAdminAlertMsg('');
+
+        // 5. Show success banner
+        showAdminAlert('🎉 Cafe branch activated successfully! Welcome to your Portal Console.');
+      } else {
+        setAdminAlertMsg('❌ Failed to save setup details. Please try again.');
+      }
+    } catch (err) {
+      setAdminAlertMsg(`❌ Error: ${err.message}`);
+      console.error('Onboarding submission error:', err);
+    }
   };
 
   // Form States - Menu
@@ -277,7 +370,12 @@ export default function AdminPanel() {
       // Subscribe to realtime orders for the selected cafe
       const unsubscribe = subscribeToOrders(selectedCafe.id, (payload) => {
         if (payload.eventType === 'INSERT') {
-          setOrders(prev => [payload.new, ...prev]);
+          setOrders(prev => {
+            if (prev.some(order => String(order.id) === String(payload.new.id))) {
+              return prev;
+            }
+            return [payload.new, ...prev];
+          });
         } else if (payload.eventType === 'UPDATE') {
           setOrders(prev => prev.map(order => order.id === payload.new.id ? payload.new : order));
         } else if (payload.eventType === 'DELETE') {
@@ -306,6 +404,12 @@ export default function AdminPanel() {
           setSelectedCafe(target);
           setAdminSession(target.id);
           return;
+        } else {
+          // Stale session! Clear it
+          console.warn("Saved admin session cafe ID not found in active cafe list. Clearing stale session.");
+          localStorage.removeItem('admin_session_cafe_id');
+          setAdminSession(null);
+          setSelectedCafe(null);
         }
       }
       if (data.length > 0 && !selectedCafe) {
@@ -771,38 +875,371 @@ export default function AdminPanel() {
     return (
       <div className="view-pane-container animated-fade-in no-print-workspace" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '80vh', padding: '20px' }}>
         <div className="form-card glass-card" style={{ maxWidth: '400px', width: '100%', padding: '2.5rem 2rem', position: 'static' }}>
-          <h2 style={{ textAlign: 'center', marginBottom: '8px' }}>🔐 Cafe Owner Access</h2>
-          <p style={{ textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '24px', lineHeight: '1.4' }}>
-            Please select your Cafe Branch and enter your Admin Password to manage your catalog and orders.
-          </p>
-          {adminAlertMsg && <div className="alert alert-error" style={{ marginBottom: '16px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', padding: '10px 14px', borderRadius: '10px', fontSize: '0.85rem' }}>{adminAlertMsg}</div>}
-          <div className="form-group">
-            <label>Select Cafe Branch</label>
-            <select value={loginCafeId} onChange={(e) => setLoginCafeId(e.target.value)}>
-              <option value="">-- Select Cafe --</option>
-              {cafes.map(c => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          </div>
-          <div className="form-group" style={{ marginBottom: '24px' }}>
-            <label>Admin Password</label>
-            <input 
-              type="password" 
-              placeholder="Enter admin password" 
-              value={loginPassword} 
-              onChange={(e) => setLoginPassword(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') handleAdminLogin(); }}
-            />
-          </div>
-          <button 
-            type="button" 
-            className="btn-primary" 
-            onClick={handleAdminLogin}
-            style={{ width: '100%' }}
-          >
-            Access Panel
-          </button>
+          {activatingCafe ? (
+            onboardStep === 1 ? (
+              <>
+                <h2 style={{ textAlign: 'center', marginBottom: '4px' }}>🚀 Cafe Setup Onboarding</h2>
+                <div style={{ textAlign: 'center', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '20px' }}>
+                  Step 1 of 2: Configure Cafe Brand Details
+                </div>
+                {adminAlertMsg && <div className="alert alert-error" style={{ marginBottom: '16px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', padding: '10px 14px', borderRadius: '10px', fontSize: '0.85rem' }}>{adminAlertMsg}</div>}
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '55vh', overflowY: 'auto', paddingRight: '4px', marginBottom: '20px' }}>
+                  <div className="form-group">
+                    <label>Cafe Name *</label>
+                    <input 
+                      type="text" 
+                      placeholder="Enter cafe name"
+                      value={onboardName} 
+                      onChange={(e) => setOnboardName(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label>Branch Location *</label>
+                    <input 
+                      type="text" 
+                      placeholder="Enter location / branch" 
+                      value={onboardLocation} 
+                      onChange={(e) => setOnboardLocation(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label>Contact Phone Number</label>
+                    <input 
+                      type="text" 
+                      placeholder="Enter phone number" 
+                      value={onboardPhone} 
+                      onChange={(e) => setOnboardPhone(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label>Branding Description</label>
+                    <textarea 
+                      placeholder="Enter brief description" 
+                      value={onboardDescription} 
+                      onChange={(e) => setOnboardDescription(e.target.value)}
+                      rows="2"
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label>Upload Logo</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        onChange={handleOnboardFileChange}
+                        style={{ display: 'none' }}
+                        id="onboard-logo-uploader"
+                      />
+                      <label 
+                        htmlFor="onboard-logo-uploader"
+                        className="btn-select"
+                        style={{ margin: 0, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                      >
+                        📁 Choose Image
+                      </label>
+                      {onboardLogoPreview && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <img 
+                            src={onboardLogoPreview} 
+                            alt="Logo preview" 
+                            style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }} 
+                          />
+                          <button 
+                            type="button" 
+                            onClick={handleRemoveOnboardLogo} 
+                            style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.8rem' }}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <button 
+                    type="button" 
+                    className="btn-primary" 
+                    onClick={() => {
+                      if (!onboardName.trim()) {
+                        setAdminAlertMsg('❌ Please enter a Cafe Name.');
+                        return;
+                      }
+                      if (!onboardLocation.trim()) {
+                        setAdminAlertMsg('❌ Please enter a Branch Location.');
+                        return;
+                      }
+                      setAdminAlertMsg('');
+                      setOnboardStep(2);
+                    }}
+                    style={{ width: '100%' }}
+                  >
+                    Next: Set Password ➔
+                  </button>
+                  
+                  <button 
+                    type="button" 
+                    className="btn-select" 
+                    onClick={() => {
+                      setActivatingCafe(null);
+                      setActivationKeyInput('');
+                      setShowActivation(true);
+                      setAdminAlertMsg('');
+                    }}
+                    style={{ width: '100%', border: '1px solid rgba(255,255,255,0.1)' }}
+                  >
+                    Cancel / Back
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h2 style={{ textAlign: 'center', marginBottom: '4px' }}>🔐 Set Security Password</h2>
+                <div style={{ textAlign: 'center', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '24px' }}>
+                  Step 2 of 2: Define Branch Credentials
+                </div>
+                {adminAlertMsg && <div className="alert alert-error" style={{ marginBottom: '16px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', padding: '10px 14px', borderRadius: '10px', fontSize: '0.85rem' }}>{adminAlertMsg}</div>}
+
+                <div className="form-group" style={{ marginBottom: '24px' }}>
+                  <label>Admin Password</label>
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    <input 
+                      type={onboardShowPassword ? "text" : "password"} 
+                      placeholder="Enter secure password" 
+                      value={onboardPassword}
+                      onChange={(e) => setOnboardPassword(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') handleOnboardSubmit(); }}
+                      style={{ paddingRight: '45px' }}
+                    />
+                    <button
+                      type="button"
+                      onMouseDown={() => setOnboardShowPassword(true)}
+                      onMouseUp={() => setOnboardShowPassword(false)}
+                      onMouseLeave={() => setOnboardShowPassword(false)}
+                      onTouchStart={() => setOnboardShowPassword(true)}
+                      onTouchEnd={() => setOnboardShowPassword(false)}
+                      style={{
+                        position: 'absolute',
+                        right: '12px',
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--text-muted)',
+                        cursor: 'pointer',
+                        padding: '8px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        userSelect: 'none',
+                        outline: 'none'
+                      }}
+                      title="Hold to show password"
+                    >
+                      {onboardShowPassword ? (
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                          <circle cx="12" cy="12" r="3"></circle>
+                        </svg>
+                      ) : (
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                          <line x1="1" y1="1" x2="23" y2="23"></line>
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <button 
+                    type="button" 
+                    className="btn-primary" 
+                    onClick={handleOnboardSubmit}
+                    disabled={loading}
+                    style={{ width: '100%' }}
+                  >
+                    {loading ? 'Activating...' : 'Activate Cafe & Log In ✅'}
+                  </button>
+                  
+                  <button 
+                    type="button" 
+                    className="btn-select" 
+                    onClick={() => {
+                      setOnboardStep(1);
+                      setAdminAlertMsg('');
+                    }}
+                    style={{ width: '100%', border: '1px solid rgba(255,255,255,0.1)' }}
+                  >
+                    ⬅️ Back to Details
+                  </button>
+                </div>
+              </>
+            )
+          ) : showActivation ? (
+            <>
+              <h2 style={{ textAlign: 'center', marginBottom: '8px' }}>🔑 Branch Activation</h2>
+              <p style={{ textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '24px', lineHeight: '1.4' }}>
+                Enter the activation key provided by the SaaS Super Admin to set up and register your cafe branch.
+              </p>
+              {adminAlertMsg && <div className="alert alert-error" style={{ marginBottom: '16px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', padding: '10px 14px', borderRadius: '10px', fontSize: '0.85rem' }}>{adminAlertMsg}</div>}
+              
+              <div className="form-group" style={{ marginBottom: '24px' }}>
+                <label>Activation Key</label>
+                <input 
+                  type="text" 
+                  placeholder="Enter key (e.g. ACT-XXXX-XXXX)" 
+                  value={activationKeyInput} 
+                  onChange={(e) => setActivationKeyInput(e.target.value.toUpperCase())}
+                  style={{ textTransform: 'uppercase' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <button 
+                  type="button" 
+                  className="btn-primary" 
+                  onClick={async () => {
+                    const key = activationKeyInput.trim();
+                    if (!key) {
+                      setAdminAlertMsg('❌ Please enter an activation key.');
+                      return;
+                    }
+                    setAdminAlertMsg('');
+                    const res = await validateActivationKey(key);
+                    if (res.success) {
+                      setActivatingCafe(res.cafe);
+                      setOnboardStep(1);
+                      setOnboardName(res.cafe.name || '');
+                      setOnboardDescription(res.cafe.description || '');
+                      setOnboardLocation(res.cafe.location || '');
+                      setOnboardPhone(res.cafe.phone || '');
+                      setOnboardLogoUrl(res.cafe.logo_url || '');
+                      setOnboardLogoFile(null);
+                      setOnboardLogoPreview(res.cafe.logo_url || '');
+                      setAdminAlertMsg('');
+                    } else {
+                      setAdminAlertMsg(res.message);
+                    }
+                  }}
+                  style={{ width: '100%' }}
+                >
+                  Verify Activation Key
+                </button>
+                
+                <button 
+                  type="button" 
+                  className="btn-select" 
+                  onClick={() => {
+                    setShowActivation(false);
+                    setActivationKeyInput('');
+                    setAdminAlertMsg('');
+                  }}
+                  style={{ width: '100%', border: '1px solid rgba(255,255,255,0.1)' }}
+                >
+                  Back to Login
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <h2 style={{ textAlign: 'center', marginBottom: '8px' }}>🔐 Cafe Owner Access</h2>
+              <p style={{ textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '24px', lineHeight: '1.4' }}>
+                Please select your Cafe Branch and enter your Admin Password to manage your catalog and orders.
+              </p>
+              {adminAlertMsg && <div className="alert alert-error" style={{ marginBottom: '16px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', padding: '10px 14px', borderRadius: '10px', fontSize: '0.85rem' }}>{adminAlertMsg}</div>}
+              <div className="form-group">
+                <label>Select Cafe Branch</label>
+                <select value={loginCafeId} onChange={(e) => setLoginCafeId(e.target.value)}>
+                  <option value="">-- Select Cafe --</option>
+                  {cafes.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group" style={{ marginBottom: '24px' }}>
+                <label>Admin Password</label>
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                  <input 
+                    type={showPassword ? "text" : "password"} 
+                    placeholder="Enter admin password" 
+                    value={loginPassword} 
+                    onChange={(e) => setLoginPassword(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleAdminLogin(); }}
+                    style={{ paddingRight: '45px' }}
+                  />
+                  <button
+                    type="button"
+                    onMouseDown={() => setShowPassword(true)}
+                    onMouseUp={() => setShowPassword(false)}
+                    onMouseLeave={() => setShowPassword(false)}
+                    onTouchStart={() => setShowPassword(true)}
+                    onTouchEnd={() => setShowPassword(false)}
+                    style={{
+                      position: 'absolute',
+                      right: '12px',
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--text-muted)',
+                      cursor: 'pointer',
+                      padding: '8px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      userSelect: 'none',
+                      outline: 'none'
+                    }}
+                    title="Hold to show password"
+                  >
+                    {showPassword ? (
+                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                        <circle cx="12" cy="12" r="3"></circle>
+                      </svg>
+                    ) : (
+                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                        <line x1="1" y1="1" x2="23" y2="23"></line>
+                      </svg>
+                    )}
+                  </button>
+                </div>
+              </div>
+              <button 
+                type="button" 
+                className="btn-primary" 
+                onClick={handleAdminLogin}
+                style={{ width: '100%', marginBottom: '16px' }}
+              >
+                Access Panel
+              </button>
+
+              <div style={{ textAlign: 'center', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '16px' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowActivation(true);
+                    setAdminAlertMsg('');
+                  }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--accent-cyan)',
+                    cursor: 'pointer',
+                    fontSize: '0.85rem',
+                    fontWeight: 500,
+                    textDecoration: 'underline'
+                  }}
+                >
+                  🔑 Activate Cafe Branch
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     );
@@ -1461,6 +1898,67 @@ export default function AdminPanel() {
                         <h3>{cafe.name}</h3>
                         {cafe.location && <p className="cafe-loc">📍 {cafe.location}</p>}
                         <span className="cafe-tables-lbl">🗂️ Tables: {cafe.table_count || 10}</span>
+
+                        {/* Activation Status Info */}
+                        <div style={{ marginTop: '10px', fontSize: '0.8rem', display: 'flex', flexDirection: 'column', gap: '6px', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ fontWeight: 600, color: 'var(--text-muted)' }}>Status:</span>
+                            <span style={{
+                              padding: '2px 8px',
+                              borderRadius: '6px',
+                              fontSize: '0.72rem',
+                              fontWeight: 'bold',
+                              textTransform: 'uppercase',
+                              background: cafe.is_activated ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)',
+                              color: cafe.is_activated ? '#10b981' : '#f59e0b',
+                              border: cafe.is_activated ? '1px solid rgba(16, 185, 129, 0.2)' : '1px solid rgba(245, 158, 11, 0.2)'
+                            }}>
+                              {cafe.is_activated ? 'Active ✅' : 'Pending ⏳'}
+                            </span>
+                          </div>
+                          
+                          {cafe.activation_key && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                              <span style={{ fontWeight: 600, color: 'var(--text-muted)' }}>Key:</span>
+                              <code style={{ background: 'rgba(255,255,255,0.06)', padding: '3px 8px', borderRadius: '6px', fontFamily: 'monospace', fontSize: '0.78rem', color: cafe.is_activated ? 'var(--text-muted)' : '#00f2fe' }}>
+                                {cafe.is_activated ? 'USED' : cafe.activation_key}
+                              </code>
+                              {!cafe.is_activated && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    navigator.clipboard.writeText(cafe.activation_key);
+                                    showAdminAlert('🔑 Activation key copied to clipboard!');
+                                  }}
+                                  style={{
+                                    background: 'rgba(255,255,255,0.04)',
+                                    border: '1px solid rgba(255,255,255,0.08)',
+                                    borderRadius: '6px',
+                                    padding: '2px 8px',
+                                    color: 'var(--text-muted)',
+                                    cursor: 'pointer',
+                                    fontSize: '0.72rem',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '3px',
+                                    transition: 'all 0.2s'
+                                  }}
+                                  onMouseOver={(e) => {
+                                    e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
+                                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)';
+                                  }}
+                                  onMouseOut={(e) => {
+                                    e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
+                                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)';
+                                  }}
+                                >
+                                  📋 Copy
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </div>
                       <div className="cafe-actions">
                         <button 
@@ -2422,7 +2920,7 @@ export function PrintBillModal({ order, cafe, menuItems, formatPrice, onClose, o
   // UGC Verification check
   const isUgcDiscountClaimed = itemsText.includes('UGC Discount Applied') || 
     (cafe?.discount_min_items > 0 && parsedItems.reduce((acc, pi) => acc + pi.qty, 0) >= cafe?.discount_min_items);
-  const hasUploadedPhotos = order.bill_photos && JSON.parse(order.bill_photos).length > 0;
+  const hasUploadedPhotos = order.ugc_image && JSON.parse(order.ugc_image).length > 0;
   const isUgcMismatch = isUgcDiscountClaimed && !hasUploadedPhotos;
 
   const handleRevokeDiscount = () => {

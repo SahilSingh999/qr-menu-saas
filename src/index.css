@@ -515,6 +515,7 @@ label {
 input[type="text"],
 input[type="url"],
 input[type="number"],
+input[type="password"],
 select,
 textarea {
   width: 100%;
@@ -1298,6 +1299,11 @@ footer code {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: 1.5rem;
+}
+@media (max-width: 400px) {
+  .waiter-orders-grid {
+    grid-template-columns: 1fr;
+  }
 }
 .waiter-order-card {
   padding: 1.5rem;

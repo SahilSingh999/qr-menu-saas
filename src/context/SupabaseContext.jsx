@@ -59,16 +59,67 @@ export const SupabaseProvider = ({ children }) => {
     setLoading(true);
     setError(null);
     try {
+      // Generate a unique activation key using cryptographically secure values
+      let activationKey = cafe.activation_key;
+      if (!activationKey) {
+        let isUnique = false;
+        let attempts = 0;
+        while (!isUnique && attempts < 5) {
+          attempts++;
+          const array = new Uint32Array(2);
+          self.crypto.getRandomValues(array);
+          const hex1 = array[0].toString(16).toUpperCase().padStart(8, '0');
+          const hex2 = array[1].toString(16).toUpperCase().padStart(8, '0');
+          const candidateKey = `ACT-${hex1.slice(0, 4)}-${hex1.slice(4, 8)}-${hex2.slice(0, 4)}`;
+
+          // Check if candidate key exists in Supabase
+          try {
+            const { data, error: dbErr } = await supabase
+              .from('cafes')
+              .select('id')
+              .eq('activation_key', candidateKey);
+            if (!dbErr && (!data || data.length === 0)) {
+              activationKey = candidateKey;
+              isUnique = true;
+            }
+          } catch (e) {
+            // Fallback: If offline or table missing, check localStorage mock data list
+            const mockList = getMockData('cafes');
+            const exists = mockList.some(c => c.activation_key === candidateKey);
+            if (!exists) {
+              activationKey = candidateKey;
+              isUnique = true;
+            }
+          }
+        }
+        // General fallback if checking failed
+        if (!activationKey) {
+          const randHex = Math.random().toString(36).substring(2, 10).toUpperCase();
+          activationKey = `ACT-FBK-${randHex}`;
+        }
+      }
+
+      const expiresAt = cafe.expires_at || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
+      const isActivated = cafe.is_activated !== undefined ? cafe.is_activated : false;
+
+      const updatedCafePayload = {
+        ...cafe,
+        activation_key: activationKey,
+        is_activated: isActivated,
+        expires_at: expiresAt
+      };
+
       const { data, error: err } = await supabase
         .from('cafes')
-        .insert([cafe])
+        .insert([updatedCafePayload])
         .select();
+
       if (err) {
         if (err.code === 'PGRST205') {
           const list = getMockData('cafes');
           const newCafe = { 
             id: Date.now(), 
-            ...cafe, 
+            ...updatedCafePayload, 
             created_at: new Date().toISOString() 
           };
           list.push(newCafe);
@@ -229,6 +280,59 @@ export const SupabaseProvider = ({ children }) => {
       setLoading(false);
     }
   };
+
+  const validateActivationKey = async (key) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data, error: err } = await supabase
+        .from('cafes')
+        .select('*')
+        .eq('activation_key', key)
+        .single();
+
+      if (err) {
+        if (err.code === 'PGRST116') {
+          return { success: false, message: '❌ Invalid activation key. Please check the code.' };
+        }
+        throw err;
+      }
+
+      if (data.is_activated) {
+        return { success: false, message: '❌ This activation key has already been used.' };
+      }
+
+      const expiry = new Date(data.expires_at);
+      if (expiry < new Date()) {
+        return { success: false, message: '❌ This activation key has expired. Please contact support.' };
+      }
+
+      return { success: true, cafe: data };
+    } catch (err) {
+      // Fallback for mock data (LocalStorage mode)
+      const mockList = getMockData('cafes');
+      const target = mockList.find(c => c.activation_key === key);
+      
+      if (!target) {
+        return { success: false, message: '❌ Invalid activation key. Please check the code.' };
+      }
+      
+      if (target.is_activated) {
+        return { success: false, message: '❌ This activation key has already been used.' };
+      }
+
+      const expiry = new Date(target.expires_at || (Date.now() + 365 * 24 * 60 * 60 * 1000));
+      if (expiry < new Date()) {
+        return { success: false, message: '❌ This activation key has expired.' };
+      }
+
+      return { success: true, cafe: target };
+    } finally {
+      setLoading(false);
+    }
+  };
+
+
 
   // Menu Items CRUD
   const fetchMenuItems = async (cafeId = null) => {
@@ -488,7 +592,16 @@ export const SupabaseProvider = ({ children }) => {
         }
         throw err;
       }
-      return data[0];
+      
+      const createdOrder = data[0];
+      // Send mock realtime event even on success so local tabs sync immediately
+      realtimeBroadcast.postMessage({
+        eventType: 'INSERT',
+        new: createdOrder,
+        old: {}
+      });
+      
+      return createdOrder;
     } catch (err) {
       setError(err.message);
       console.error('Error creating order:', err);
@@ -525,7 +638,16 @@ export const SupabaseProvider = ({ children }) => {
         }
         throw err;
       }
-      return data[0];
+      
+      const updatedOrder = data[0];
+      // Send mock realtime event even on success so local tabs sync immediately
+      realtimeBroadcast.postMessage({
+        eventType: 'UPDATE',
+        new: updatedOrder,
+        old: { id }
+      });
+      
+      return updatedOrder;
     } catch (err) {
       setError(err.message);
       console.error('Error updating order status:', err);
@@ -562,7 +684,16 @@ export const SupabaseProvider = ({ children }) => {
         
         return updatedOrder;
       }
-      return data[0];
+      
+      const updatedOrder = data[0];
+      // Send mock realtime event even on success so local tabs sync immediately
+      realtimeBroadcast.postMessage({
+        eventType: 'UPDATE',
+        new: updatedOrder,
+        old: { id }
+      });
+      
+      return updatedOrder;
     } catch (err) {
       setError(err.message);
       console.error('Error updating order:', err);
@@ -596,6 +727,14 @@ export const SupabaseProvider = ({ children }) => {
         }
         throw err;
       }
+      
+      // Send mock realtime event even on success so local tabs sync immediately
+      realtimeBroadcast.postMessage({
+        eventType: 'DELETE',
+        new: {},
+        old: { id }
+      });
+      
       return true;
     } catch (err) {
       setError(err.message);
@@ -637,7 +776,7 @@ export const SupabaseProvider = ({ children }) => {
     // Fallback broadcast channel listener for local tabs
     const handleBroadcastMessage = (e) => {
       const payload = e.data;
-      if (cafeId && payload.new && payload.new.cafe_id !== parseInt(cafeId) && payload.new.cafe_id !== cafeId) {
+      if (cafeId && payload.new && String(payload.new.cafe_id) !== String(cafeId)) {
         return;
       }
       onEvent(payload);
@@ -653,6 +792,55 @@ export const SupabaseProvider = ({ children }) => {
     };
   };
 
+  const compressImage = (file, maxDimension = 1000, quality = 0.75) => {
+    return new Promise((resolve) => {
+      if (!file || !file.type || !file.type.startsWith('image/')) {
+        return resolve(file);
+      }
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > maxDimension) {
+              height = Math.round((height * maxDimension) / width);
+              width = maxDimension;
+            }
+          } else {
+            if (height > maxDimension) {
+              width = Math.round((width * maxDimension) / height);
+              height = maxDimension;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+
+          canvas.toBlob((blob) => {
+            if (blob) {
+              const compressedFile = new File([blob], file.name || 'image.jpg', {
+                type: 'image/jpeg',
+                lastModified: Date.now()
+              });
+              resolve(compressedFile);
+            } else {
+              resolve(file);
+            }
+          }, 'image/jpeg', quality);
+        };
+        img.src = event.target.result;
+      };
+      reader.onerror = () => resolve(file);
+      reader.readAsDataURL(file);
+    });
+  };
+
   const compressAndConvertToBase64 = (file) => {
     return new Promise((resolve) => {
       const reader = new FileReader();
@@ -660,8 +848,8 @@ export const SupabaseProvider = ({ children }) => {
         const img = new Image();
         img.onload = () => {
           const canvas = document.createElement('canvas');
-          const MAX_WIDTH = 300;
-          const MAX_HEIGHT = 300;
+          const MAX_WIDTH = 1200;
+          const MAX_HEIGHT = 1200;
           let width = img.width;
           let height = img.height;
 
@@ -682,8 +870,8 @@ export const SupabaseProvider = ({ children }) => {
           const ctx = canvas.getContext('2d');
           ctx.drawImage(img, 0, 0, width, height);
 
-          // Compress to JPEG with 0.7 quality to keep it around 15-20KB
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+          // Compress to JPEG with 0.82 quality for high-fidelity offline previews
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
           resolve(dataUrl);
         };
         img.src = event.target.result;
@@ -696,17 +884,24 @@ export const SupabaseProvider = ({ children }) => {
     setLoading(true);
     setError(null);
     try {
-      const fileExt = file.name.split('.').pop();
+      let fileToUpload = file;
+      if (file && file.type && file.type.startsWith('image/')) {
+        // Compress to max 1600px dimension with 85% JPEG quality.
+        // This keeps the image sharp for social media while still compressing 5MB down to ~150KB-200KB.
+        fileToUpload = await compressImage(file, 1600, 0.85);
+      }
+
+      const fileExt = fileToUpload.name ? fileToUpload.name.split('.').pop() : 'jpg';
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
       const filePath = `${fileName}`;
 
       const { data, error: uploadErr } = await supabase.storage
         .from(bucket)
-        .upload(filePath, file);
+        .upload(filePath, fileToUpload);
 
       if (uploadErr) {
         console.warn('Supabase storage upload failed, falling back to base64 encoding with compression:', uploadErr.message);
-        return compressAndConvertToBase64(file);
+        return compressAndConvertToBase64(fileToUpload);
       }
 
       const { data: { publicUrl } } = supabase.storage
@@ -744,7 +939,8 @@ export const SupabaseProvider = ({ children }) => {
     uploadImage,
     fetchStaff,
     createStaff,
-    deleteStaff
+    deleteStaff,
+    validateActivationKey
   };
 
   return (

@@ -659,9 +659,9 @@ const FamilyMode = ({ cafeName, tableId, cafeId }) => {
         if (orders) {
           const photos = [];
           orders.forEach(order => {
-            if (order.bill_photos) {
+            if (order.ugc_image) {
               try {
-                const parsed = JSON.parse(order.bill_photos);
+                const parsed = JSON.parse(order.ugc_image);
                 if (Array.isArray(parsed)) {
                   photos.push(...parsed);
                 }
@@ -751,7 +751,7 @@ const FamilyMode = ({ cafeName, tableId, cafeId }) => {
 };
 
 // Voucher Code Unlock Screen
-const VoucherUnlockScreen = ({ themeColor, onClear }) => {
+const VoucherUnlockScreen = ({ order, themeColor, onClear }) => {
   const [scratched, setScratched] = useState(false);
   const [copied, setCopied] = useState(false);
   
@@ -763,6 +763,61 @@ const VoucherUnlockScreen = ({ themeColor, onClear }) => {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  let isUgcUploaded = false;
+  if (order?.ugc_image) {
+    try {
+      const parsed = JSON.parse(order.ugc_image);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        isUgcUploaded = true;
+      }
+    } catch (e) {}
+  }
+
+  const isDiscountRevoked = order?.items && order.items.includes('[❌ Discount Revoked/Not Applied]');
+
+  // Case A: Photos uploaded but discount revoked by the waiter
+  if (isUgcUploaded && isDiscountRevoked) {
+    return (
+      <div className="voucher-unlock-fullscreen glass-blur animated-fade-in">
+        <div className="voucher-card glass-card animated-zoom-in" style={{ border: '1px solid rgba(239, 68, 68, 0.4)' }}>
+          <div className="voucher-emoji-rain">⚠️ 📝 🍽️ ⌛ ⚠️</div>
+          <h2 style={{ color: '#ef4444' }}>⚠️ Discount Not Approved</h2>
+          <p className="voucher-thanks" style={{ fontSize: '0.95rem', margin: '20px 0', lineHeight: '1.6', color: '#f3f4f6' }}>
+            Sorry, this time no discount. You uploaded something we are not able to approve for discount. Please visit next time and upload good enjoying images in our cafe.
+          </p>
+          <div className="voucher-focus-note" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+            🏁 <strong>Order Completed:</strong> Your bill payment was confirmed. We look forward to serving you again soon!
+          </div>
+          <button className="btn-primary btn-close-voucher" onClick={onClear} style={{ background: '#ef4444', color: 'white', marginTop: '1.5rem', width: '100%', border: 'none', borderRadius: '12px', padding: '12px', fontWeight: 'bold', cursor: 'pointer' }}>
+            Done & Back to Menu
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Case B: No photos uploaded (normal checkout completion)
+  if (!isUgcUploaded) {
+    return (
+      <div className="voucher-unlock-fullscreen glass-blur animated-fade-in">
+        <div className="voucher-card glass-card animated-zoom-in">
+          <div className="voucher-emoji-rain">✨ 🍽️ 💖 ☕ ✨</div>
+          <h2>🎉 Thank You!</h2>
+          <p className="voucher-thanks" style={{ fontSize: '1rem', margin: '20px 0', lineHeight: '1.6', color: '#f3f4f6' }}>
+            Your bill has been settled successfully. Order completed! Please visit us next time soon.
+          </p>
+          <div className="voucher-focus-note" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
+            🍽️ We hope you had a wonderful dining experience with us!
+          </div>
+          <button className="btn-primary btn-close-voucher" onClick={onClear} style={{ background: themeColor || 'var(--customer-accent)', color: '#0b0f19', marginTop: '1.5rem', width: '100%' }}>
+            Done & Back to Menu
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Case C: Photos uploaded and discount approved (default scratch card view)
   return (
     <div className="voucher-unlock-fullscreen glass-blur animated-fade-in">
       <div className="voucher-card glass-card animated-zoom-in">
@@ -791,7 +846,6 @@ const VoucherUnlockScreen = ({ themeColor, onClear }) => {
           )}
         </div>
 
-        {/* Focus note for saving/keeping code safely */}
         <div className="voucher-focus-note">
           💡 <strong>Important:</strong> Please keep this code safely to avail the discount for your next order! You can take a screenshot or save it in your notes for your next visit. Thank you!
         </div>
@@ -1332,7 +1386,7 @@ export default function CustomerView() {
         status: 'bill_requested',
         total_price: finalPrice,
         items: finalItems,
-        bill_photos: JSON.stringify(uploadedUrls)
+        ugc_image: JSON.stringify(uploadedUrls)
       });
       
       if (updated) {
@@ -1606,6 +1660,7 @@ export default function CustomerView() {
       {/* Voucher Code Unlock Screen Overlay */}
       {orderTracking && orderTracking.status === 'bill_approved' && (
         <VoucherUnlockScreen 
+          order={orderTracking}
           themeColor={cafe?.theme_color} 
           onClear={handleClearTracking} 
         />
