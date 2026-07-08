@@ -25,7 +25,10 @@ export default function AdminPanel() {
     fetchStaff,
     createStaff,
     deleteStaff,
-    validateActivationKey
+    validateActivationKey,
+    fetchCafeByUsername,
+    fetchCafeById,
+    verifyRecoveryKey
   } = useSupabase();
 
   // State
@@ -41,7 +44,8 @@ export default function AdminPanel() {
     return saved ? parseInt(saved) : null;
   });
   const [loginPassword, setLoginPassword] = useState('');
-  const [loginCafeId, setLoginCafeId] = useState('');
+  const [loginUsername, setLoginUsername] = useState('');
+  const [isCafeLocked, setIsCafeLocked] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showActivation, setShowActivation] = useState(false);
   const [activationKeyInput, setActivationKeyInput] = useState('');
@@ -54,8 +58,25 @@ export default function AdminPanel() {
   const [onboardLogoUrl, setOnboardLogoUrl] = useState('');
   const [onboardLogoFile, setOnboardLogoFile] = useState(null);
   const [onboardLogoPreview, setOnboardLogoPreview] = useState('');
+  const [onboardUsername, setOnboardUsername] = useState('');
   const [onboardPassword, setOnboardPassword] = useState('');
   const [onboardShowPassword, setOnboardShowPassword] = useState(false);
+  
+  // Super Admin & Create Password Visibility States
+  const [isSuperAdminSession, setIsSuperAdminSession] = useState(() => localStorage.getItem('is_super_admin_session') === 'true');
+  const [superAdminPassword, setSuperAdminPassword] = useState('');
+  const [loginTab, setLoginTab] = useState('owner'); // 'owner' | 'super'
+  const [showCreatePassword, setShowCreatePassword] = useState(false);
+
+  // Password Recovery States
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotPasswordKey, setForgotPasswordKey] = useState('');
+  const [forgotPasswordCafe, setForgotPasswordCafe] = useState(null);
+  const [resetUsername, setResetUsername] = useState('');
+  const [resetPassword, setResetPassword] = useState('');
+  const [showResetPasswordConfirm, setShowResetPasswordConfirm] = useState(false);
+  const [inlineResetPasswordCafeId, setInlineResetPasswordCafeId] = useState(null);
+  const [inlineNewPassword, setInlineNewPassword] = useState('');
 
   // Staff States
   const [staffName, setStaffName] = useState('');
@@ -117,6 +138,10 @@ export default function AdminPanel() {
 
   const handleOnboardSubmit = async (e) => {
     if (e) e.preventDefault();
+    if (!onboardUsername.trim()) {
+      setAdminAlertMsg('❌ Please enter an admin username.');
+      return;
+    }
     if (!onboardPassword.trim()) {
       setAdminAlertMsg('❌ Please enter a security password.');
       return;
@@ -145,6 +170,7 @@ export default function AdminPanel() {
         location: onboardLocation.trim(),
         phone: onboardPhone.trim(),
         logo_url: finalLogoUrl,
+        admin_username: onboardUsername.trim().toLowerCase(),
         admin_password: onboardPassword.trim(),
         is_activated: true
       };
@@ -282,14 +308,7 @@ export default function AdminPanel() {
   const [customOrderText, setCustomOrderText] = useState('');
 
   // 📦 Raw Inventory / Ingredients States & Logic
-  const [rawIngredients, setRawIngredients] = useState(() => {
-    const saved = localStorage.getItem('raw_ingredients_inventory');
-    return saved ? JSON.parse(saved) : [
-      { id: 1, name: 'Maida / Flour', stock: 5, low_stock_threshold: 2, unit: 'KG' },
-      { id: 2, name: 'Cigarette Boxes', stock: 50, low_stock_threshold: 10, unit: 'packs' },
-      { id: 3, name: 'Cold Drink Bottles', stock: 50, low_stock_threshold: 5, unit: 'bottles' }
-    ];
-  });
+  const [rawIngredients, setRawIngredients] = useState([]);
 
   const [rawName, setRawName] = useState('');
   const [rawStock, setRawStock] = useState('');
@@ -297,9 +316,23 @@ export default function AdminPanel() {
   const [rawUnit, setRawUnit] = useState('KG');
 
   useEffect(() => {
-    localStorage.setItem('raw_ingredients_inventory', JSON.stringify(rawIngredients));
-    window.dispatchEvent(new Event('storage'));
-  }, [rawIngredients]);
+    if (selectedCafe) {
+      const saved = localStorage.getItem(`raw_ingredients_inventory_cafe_${selectedCafe.id}`);
+      setRawIngredients(saved ? JSON.parse(saved) : [
+        { id: 1, name: 'Maida / Flour', stock: 5, low_stock_threshold: 2, unit: 'KG' },
+        { id: 2, name: 'Cigarette Boxes', stock: 50, low_stock_threshold: 10, unit: 'packs' },
+        { id: 3, name: 'Cold Drink Bottles', stock: 50, low_stock_threshold: 5, unit: 'bottles' }
+      ]);
+    } else {
+      setRawIngredients([]);
+    }
+  }, [selectedCafe]);
+
+  useEffect(() => {
+    if (selectedCafe && rawIngredients.length > 0) {
+      localStorage.setItem(`raw_ingredients_inventory_cafe_${selectedCafe.id}`, JSON.stringify(rawIngredients));
+    }
+  }, [rawIngredients, selectedCafe]);
 
   const formatIngredientQty = (qty, unit) => {
     const num = parseFloat(qty);
@@ -351,8 +384,20 @@ export default function AdminPanel() {
     setRawIngredients(prev => prev.filter(item => item.id !== id));
   };
 
-  // Fetch initial data (Cafes)
+  // Fetch initial data (Cafes / Locked Cafe ID)
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const cafeQueryId = params.get('cafe');
+    if (cafeQueryId) {
+      const loadLockedCafe = async () => {
+        const cafeData = await fetchCafeById(cafeQueryId);
+        if (cafeData) {
+          setSelectedCafe(cafeData);
+          setIsCafeLocked(true);
+        }
+      };
+      loadLockedCafe();
+    }
     loadCafes();
   }, []);
 
@@ -394,26 +439,26 @@ export default function AdminPanel() {
 
   // Data Loading Helpers
   const loadCafes = async () => {
-    const data = await fetchCafes();
-    if (data) {
-      setCafes(data);
-      const savedSession = localStorage.getItem('admin_session_cafe_id');
-      if (savedSession && data.length > 0) {
-        const target = data.find(c => String(c.id) === String(savedSession));
-        if (target) {
-          setSelectedCafe(target);
-          setAdminSession(target.id);
-          return;
-        } else {
-          // Stale session! Clear it
-          console.warn("Saved admin session cafe ID not found in active cafe list. Clearing stale session.");
-          localStorage.removeItem('admin_session_cafe_id');
-          setAdminSession(null);
-          setSelectedCafe(null);
+    const savedSession = localStorage.getItem('admin_session_cafe_id');
+    const isSuper = localStorage.getItem('is_super_admin_session') === 'true';
+    if (savedSession || isSuper) {
+      const data = await fetchCafes();
+      if (data) {
+        setCafes(data);
+        if (savedSession) {
+          const target = data.find(c => String(c.id) === String(savedSession));
+          if (target) {
+            setSelectedCafe(target);
+            setAdminSession(target.id);
+            return;
+          } else {
+            // Stale session! Clear it
+            console.warn("Saved admin session cafe ID not found in active cafe list. Clearing stale session.");
+            localStorage.removeItem('admin_session_cafe_id');
+            setAdminSession(null);
+            setSelectedCafe(null);
+          }
         }
-      }
-      if (data.length > 0 && !selectedCafe) {
-        setSelectedCafe(data[0]);
       }
     }
   };
@@ -440,30 +485,154 @@ export default function AdminPanel() {
     if (data) setStaffList(data);
   };
 
-  const handleAdminLogin = () => {
-    if (!loginCafeId) {
-      setAdminAlertMsg('Please select a Cafe Branch.');
+  const handleAdminLogin = async () => {
+    setAdminAlertMsg('');
+
+    if (loginTab === 'super') {
+      if (superAdminPassword === 'superadmin' || superAdminPassword === 'admin123') {
+        setIsSuperAdminSession(true);
+        localStorage.setItem('is_super_admin_session', 'true');
+        
+        // Load all cafes for Super Admin console
+        const allCafes = await fetchCafes();
+        if (allCafes) {
+          setCafes(allCafes);
+          if (allCafes.length > 0) setSelectedCafe(allCafes[0]);
+        }
+
+        setSuperAdminPassword('');
+        setAdminAlertMsg('');
+      } else {
+        setAdminAlertMsg('❌ Incorrect Super Admin password.');
+      }
       return;
     }
-    const target = cafes.find(c => String(c.id) === String(loginCafeId));
+
+    let target = null;
+    if (isCafeLocked && selectedCafe) {
+      target = selectedCafe;
+    } else {
+      if (!loginUsername.trim()) {
+        setAdminAlertMsg('Please enter your Admin Username.');
+        return;
+      }
+      target = await fetchCafeByUsername(loginUsername.trim().toLowerCase());
+    }
+
     if (target) {
+      if (!target.is_activated) {
+        setAdminAlertMsg('❌ This cafe branch has not been activated yet. Please activate it first.');
+        return;
+      }
       const correctPassword = target.admin_password || 'admin123';
       if (loginPassword === correctPassword) {
         setAdminSession(target.id);
         setSelectedCafe(target);
         localStorage.setItem('admin_session_cafe_id', String(target.id));
+        
+        // Populate cafes list for list manager view on successful login
+        const allCafes = await fetchCafes();
+        if (allCafes) setCafes(allCafes);
+
         setLoginPassword('');
+        setLoginUsername('');
         setAdminAlertMsg('');
       } else {
         setAdminAlertMsg('❌ Incorrect admin password. Please try again.');
       }
+    } else {
+      setAdminAlertMsg('❌ Admin username not found. Please verify and try again.');
     }
   };
 
   const handleAdminLogout = () => {
     setAdminSession(null);
-    setSelectedCafe(null);
+    setIsSuperAdminSession(false);
     localStorage.removeItem('admin_session_cafe_id');
+    localStorage.removeItem('is_super_admin_session');
+    if (!isCafeLocked) {
+      setSelectedCafe(null);
+    }
+  };
+
+  const handleVerifyRecoveryKey = async () => {
+    const key = forgotPasswordKey.trim().toUpperCase();
+    if (!key) {
+      setAdminAlertMsg('❌ Please enter an activation key.');
+      return;
+    }
+    setAdminAlertMsg('');
+    const res = await verifyRecoveryKey(key);
+    if (res.success) {
+      setForgotPasswordCafe(res.cafe);
+      setResetUsername(res.cafe.admin_username || '');
+      setAdminAlertMsg('');
+    } else {
+      setAdminAlertMsg(res.message);
+    }
+  };
+
+  const handleResetCredentials = async () => {
+    if (!resetUsername.trim()) {
+      setAdminAlertMsg('❌ Please enter a new admin username.');
+      return;
+    }
+    if (!resetPassword.trim()) {
+      setAdminAlertMsg('❌ Please enter a new password.');
+      return;
+    }
+    if (resetPassword.trim().length < 4) {
+      setAdminAlertMsg('❌ Password must be at least 4 characters long.');
+      return;
+    }
+
+    setAdminAlertMsg('');
+    try {
+      const payload = {
+        admin_username: resetUsername.trim().toLowerCase(),
+        admin_password: resetPassword.trim()
+      };
+      
+      const updated = await updateCafe(forgotPasswordCafe.id, payload);
+      if (updated) {
+        showAdminAlert('🎉 Credentials updated successfully! You can now log in.');
+        
+        // Reset states
+        setShowForgotPassword(false);
+        setForgotPasswordKey('');
+        setForgotPasswordCafe(null);
+        setResetUsername('');
+        setResetPassword('');
+        setAdminAlertMsg('');
+      } else {
+        setAdminAlertMsg('❌ Failed to update credentials. Please try again.');
+      }
+    } catch (err) {
+      setAdminAlertMsg(`❌ Error: ${err.message}`);
+    }
+  };
+
+  const handleSuperAdminResetPassword = async (cafeId) => {
+    if (!inlineNewPassword.trim() || inlineNewPassword.trim().length < 4) {
+      showAdminAlert('❌ Password must be at least 4 characters long.');
+      return;
+    }
+    try {
+      const updated = await updateCafe(cafeId, { admin_password: inlineNewPassword.trim() });
+      if (updated) {
+        showAdminAlert(`🎉 Password for ${updated.name} updated successfully to: ${inlineNewPassword.trim()}`);
+        setInlineResetPasswordCafeId(null);
+        setInlineNewPassword('');
+        
+        // Refresh cafes list to keep views synced
+        const allCafes = await fetchCafes();
+        if (allCafes) setCafes(allCafes);
+      } else {
+        showAdminAlert('❌ Failed to reset password.');
+      }
+    } catch (err) {
+      showAdminAlert(`❌ Error: ${err.message}`);
+    }
   };
 
   const handleCurrencyChange = async (code) => {
@@ -672,9 +841,9 @@ export default function AdminPanel() {
   };
 
   const deductIngredientsForOrderItem = (menuItem, quantity) => {
-    if (!menuItem.recipe || !Array.isArray(menuItem.recipe)) return;
+    if (!menuItem.recipe || !Array.isArray(menuItem.recipe) || !selectedCafe) return;
     
-    const saved = localStorage.getItem('raw_ingredients_inventory');
+    const saved = localStorage.getItem(`raw_ingredients_inventory_cafe_${selectedCafe.id}`);
     if (!saved) return;
     
     let rawList = JSON.parse(saved);
@@ -691,7 +860,7 @@ export default function AdminPanel() {
     }
 
     if (updated) {
-      localStorage.setItem('raw_ingredients_inventory', JSON.stringify(rawList));
+      localStorage.setItem(`raw_ingredients_inventory_cafe_${selectedCafe.id}`, JSON.stringify(rawList));
       setRawIngredients(rawList); // Update state directly
       window.dispatchEvent(new Event('storage'));
     }
@@ -871,11 +1040,107 @@ export default function AdminPanel() {
     URL.revokeObjectURL(url);
   };
 
-  if (cafes.length > 0 && !adminSession) {
+  if (!adminSession && !isSuperAdminSession) {
     return (
       <div className="view-pane-container animated-fade-in no-print-workspace" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '80vh', padding: '20px' }}>
         <div className="form-card glass-card" style={{ maxWidth: '400px', width: '100%', padding: '2.5rem 2rem', position: 'static' }}>
-          {activatingCafe ? (
+          {showForgotPassword ? (
+            forgotPasswordCafe ? (
+              // Step 2: Choose new username and password
+              <>
+                <h2 style={{ textAlign: 'center', marginBottom: '8px' }}>🔑 Reset Credentials</h2>
+                <p style={{ textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '24px', lineHeight: '1.4' }}>
+                  Reset admin credentials for <strong>{forgotPasswordCafe.name}</strong>.
+                </p>
+                {adminAlertMsg && <div className="alert alert-error" style={{ marginBottom: '16px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', padding: '10px 14px', borderRadius: '10px', fontSize: '0.85rem' }}>{adminAlertMsg}</div>}
+                
+                <div className="form-group" style={{ marginBottom: '16px' }}>
+                  <label>New Admin Username *</label>
+                  <input 
+                    type="text" 
+                    placeholder="Enter new username" 
+                    value={resetUsername} 
+                    onChange={(e) => setResetUsername(e.target.value)} 
+                  />
+                </div>
+
+                <div className="form-group" style={{ marginBottom: '24px' }}>
+                  <label>New Password *</label>
+                  <input 
+                    type="password" 
+                    placeholder="Enter new password" 
+                    value={resetPassword} 
+                    onChange={(e) => setResetPassword(e.target.value)} 
+                  />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <button 
+                    type="button" 
+                    className="btn-primary" 
+                    onClick={handleResetCredentials}
+                    style={{ width: '100%' }}
+                  >
+                    Save Credentials &amp; Log In
+                  </button>
+                  <button 
+                    type="button" 
+                    className="btn-select" 
+                    onClick={() => {
+                      setForgotPasswordCafe(null);
+                      setAdminAlertMsg('');
+                    }}
+                    style={{ width: '100%', border: '1px solid rgba(255,255,255,0.1)' }}
+                  >
+                    ⬅️ Back
+                  </button>
+                </div>
+              </>
+            ) : (
+              // Step 1: Input original Activation Key
+              <>
+                <h2 style={{ textAlign: 'center', marginBottom: '8px' }}>🔑 Password Recovery</h2>
+                <p style={{ textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '24px', lineHeight: '1.4' }}>
+                  Enter your cafe branch's original Activation Key to verify ownership and reset your credentials.
+                </p>
+                {adminAlertMsg && <div className="alert alert-error" style={{ marginBottom: '16px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', padding: '10px 14px', borderRadius: '10px', fontSize: '0.85rem' }}>{adminAlertMsg}</div>}
+                
+                <div className="form-group" style={{ marginBottom: '24px' }}>
+                  <label>Activation Key</label>
+                  <input 
+                    type="text" 
+                    placeholder="Enter original key (e.g. ACT-XXXX-XXXX)" 
+                    value={forgotPasswordKey} 
+                    onChange={(e) => setForgotPasswordKey(e.target.value.toUpperCase())}
+                    style={{ textTransform: 'uppercase' }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <button 
+                    type="button" 
+                    className="btn-primary" 
+                    onClick={handleVerifyRecoveryKey}
+                    style={{ width: '100%' }}
+                  >
+                    Verify Key &amp; Reset
+                  </button>
+                  <button 
+                    type="button" 
+                    className="btn-select" 
+                    onClick={() => {
+                      setShowForgotPassword(false);
+                      setForgotPasswordKey('');
+                      setAdminAlertMsg('');
+                    }}
+                    style={{ width: '100%', border: '1px solid rgba(255,255,255,0.1)' }}
+                  >
+                    Back to Login
+                  </button>
+                </div>
+              </>
+            )
+          ) : activatingCafe ? (
             onboardStep === 1 ? (
               <>
                 <h2 style={{ textAlign: 'center', marginBottom: '4px' }}>🚀 Cafe Setup Onboarding</h2>
@@ -1006,8 +1271,18 @@ export default function AdminPanel() {
                 </div>
                 {adminAlertMsg && <div className="alert alert-error" style={{ marginBottom: '16px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', padding: '10px 14px', borderRadius: '10px', fontSize: '0.85rem' }}>{adminAlertMsg}</div>}
 
+                <div className="form-group" style={{ marginBottom: '16px' }}>
+                  <label>Admin Username *</label>
+                  <input 
+                    type="text" 
+                    placeholder="Set username (e.g. mycafe)" 
+                    value={onboardUsername}
+                    onChange={(e) => setOnboardUsername(e.target.value)}
+                  />
+                </div>
+
                 <div className="form-group" style={{ marginBottom: '24px' }}>
-                  <label>Admin Password</label>
+                  <label>Admin Password *</label>
                   <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                     <input 
                       type={onboardShowPassword ? "text" : "password"} 
@@ -1147,68 +1422,175 @@ export default function AdminPanel() {
             </>
           ) : (
             <>
-              <h2 style={{ textAlign: 'center', marginBottom: '8px' }}>🔐 Cafe Owner Access</h2>
-              <p style={{ textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '24px', lineHeight: '1.4' }}>
-                Please select your Cafe Branch and enter your Admin Password to manage your catalog and orders.
-              </p>
-              {adminAlertMsg && <div className="alert alert-error" style={{ marginBottom: '16px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', padding: '10px 14px', borderRadius: '10px', fontSize: '0.85rem' }}>{adminAlertMsg}</div>}
-              <div className="form-group">
-                <label>Select Cafe Branch</label>
-                <select value={loginCafeId} onChange={(e) => setLoginCafeId(e.target.value)}>
-                  <option value="">-- Select Cafe --</option>
-                  {cafes.map(c => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="form-group" style={{ marginBottom: '24px' }}>
-                <label>Admin Password</label>
-                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                  <input 
-                    type={showPassword ? "text" : "password"} 
-                    placeholder="Enter admin password" 
-                    value={loginPassword} 
-                    onChange={(e) => setLoginPassword(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') handleAdminLogin(); }}
-                    style={{ paddingRight: '45px' }}
-                  />
+              {/* Tab Selector */}
+              {!isCafeLocked && (
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '12px' }}>
                   <button
                     type="button"
-                    onMouseDown={() => setShowPassword(true)}
-                    onMouseUp={() => setShowPassword(false)}
-                    onMouseLeave={() => setShowPassword(false)}
-                    onTouchStart={() => setShowPassword(true)}
-                    onTouchEnd={() => setShowPassword(false)}
+                    onClick={() => { setLoginTab('owner'); setAdminAlertMsg(''); }}
                     style={{
-                      position: 'absolute',
-                      right: '12px',
+                      flex: 1,
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontSize: '0.85rem',
+                      fontWeight: 600,
+                      background: loginTab === 'owner' ? 'var(--accent-purple)' : 'transparent',
+                      color: loginTab === 'owner' ? '#fff' : 'var(--text-muted)',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    🏢 Cafe Owner
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setLoginTab('super'); setAdminAlertMsg(''); }}
+                    style={{
+                      flex: 1,
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontSize: '0.85rem',
+                      fontWeight: 600,
+                      background: loginTab === 'super' ? 'var(--accent-cyan)' : 'transparent',
+                      color: loginTab === 'super' ? '#fff' : 'var(--text-muted)',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    🛡️ Super Admin
+                  </button>
+                </div>
+              )}
+
+              {loginTab === 'super' && !isCafeLocked ? (
+                <>
+                  <h2 style={{ textAlign: 'center', marginBottom: '8px' }}>🛡️ SaaS Super Admin</h2>
+                  <p style={{ textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '24px', lineHeight: '1.4' }}>
+                    Enter the master password to provision branches, copy keys, and manage global settings.
+                  </p>
+                  {adminAlertMsg && <div className="alert alert-error" style={{ marginBottom: '16px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', padding: '10px 14px', borderRadius: '10px', fontSize: '0.85rem' }}>{adminAlertMsg}</div>}
+                  
+                  <div className="form-group" style={{ marginBottom: '24px' }}>
+                    <label>Super Admin Password</label>
+                    <input 
+                      type="password" 
+                      placeholder="Enter master password" 
+                      value={superAdminPassword} 
+                      onChange={(e) => setSuperAdminPassword(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') handleAdminLogin(); }}
+                    />
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginTop: '6px' }}>
+                      💡 Demo master password: <code>superadmin</code>
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h2 style={{ textAlign: 'center', marginBottom: '8px' }}>🔐 Cafe Owner Access</h2>
+                  <p style={{ textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '24px', lineHeight: '1.4' }}>
+                    {isCafeLocked && selectedCafe
+                      ? `Enter the admin password for ${selectedCafe.name} to manage catalog and orders.`
+                      : 'Enter your Admin Username and Password to manage catalog and orders.'}
+                  </p>
+                  {adminAlertMsg && <div className="alert alert-error" style={{ marginBottom: '16px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', padding: '10px 14px', borderRadius: '10px', fontSize: '0.85rem' }}>{adminAlertMsg}</div>}
+                  
+                  {isCafeLocked && selectedCafe ? (
+                    <div className="form-group" style={{ marginBottom: '16px' }}>
+                      <label>Cafe Branch</label>
+                      <input 
+                        type="text" 
+                        value={selectedCafe.name} 
+                        disabled 
+                        style={{ background: 'rgba(255,255,255,0.04)', color: 'var(--text-muted)', cursor: 'not-allowed' }}
+                      />
+                    </div>
+                  ) : (
+                    <div className="form-group" style={{ marginBottom: '16px' }}>
+                      <label>Admin Username</label>
+                      <input 
+                        type="text" 
+                        placeholder="Enter admin username" 
+                        value={loginUsername} 
+                        onChange={(e) => setLoginUsername(e.target.value)} 
+                      />
+                    </div>
+                  )}
+                  
+                  <div className="form-group" style={{ marginBottom: '24px' }}>
+                    <label>Admin Password</label>
+                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                      <input 
+                        type={showPassword ? "text" : "password"} 
+                        placeholder="Enter admin password" 
+                        value={loginPassword} 
+                        onChange={(e) => setLoginPassword(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') handleAdminLogin(); }}
+                        style={{ paddingRight: '45px' }}
+                      />
+                      <button
+                        type="button"
+                        onMouseDown={() => setShowPassword(true)}
+                        onMouseUp={() => setShowPassword(false)}
+                        onMouseLeave={() => setShowPassword(false)}
+                        onTouchStart={() => setShowPassword(true)}
+                        onTouchEnd={() => setShowPassword(false)}
+                        style={{
+                          position: 'absolute',
+                          right: '12px',
+                          background: 'none',
+                          border: 'none',
+                          color: 'var(--text-muted)',
+                          cursor: 'pointer',
+                          padding: '8px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          userSelect: 'none',
+                          outline: 'none'
+                        }}
+                        title="Hold to show password"
+                      >
+                        {showPassword ? (
+                          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                            <circle cx="12" cy="12" r="3"></circle>
+                          </svg>
+                        ) : (
+                          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                            <line x1="1" y1="1" x2="23" y2="23"></line>
+                          </svg>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', fontSize: '0.85rem' }}>
+                <span/>
+                {loginTab === 'owner' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowForgotPassword(true);
+                      setAdminAlertMsg('');
+                    }}
+                    style={{
                       background: 'none',
                       border: 'none',
                       color: 'var(--text-muted)',
                       cursor: 'pointer',
-                      padding: '8px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      userSelect: 'none',
-                      outline: 'none'
+                      fontSize: '0.8rem',
+                      textDecoration: 'underline'
                     }}
-                    title="Hold to show password"
                   >
-                    {showPassword ? (
-                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                        <circle cx="12" cy="12" r="3"></circle>
-                      </svg>
-                    ) : (
-                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
-                        <line x1="1" y1="1" x2="23" y2="23"></line>
-                      </svg>
-                    )}
+                    Forgot Password?
                   </button>
-                </div>
+                )}
               </div>
+
               <button 
                 type="button" 
                 className="btn-primary" 
@@ -1308,6 +1690,12 @@ export default function AdminPanel() {
           <button className="admin-alert-close" onClick={() => setAdminAlertMsg('')}>×</button>
         </div>
       )}
+      {error && (
+        <div className="admin-alert-banner animated-slide-down" style={{ background: 'rgba(239, 68, 68, 0.95)' }}>
+          <span>❌ Database Error: {error}</span>
+          <button className="admin-alert-close" onClick={() => setError(null)}>×</button>
+        </div>
+      )}
 
       {/* Global Stat Row */}
       <section className="stats-row">
@@ -1315,7 +1703,7 @@ export default function AdminPanel() {
           <div className="stat-icon icon-cafe">🏠</div>
           <div className="stat-info">
             <h3>Total Cafes</h3>
-            <p className="stat-number">{cafes.length}</p>
+            <p className="stat-number">{displayedCafes.length}</p>
           </div>
         </div>
         <div className="stat-card glass-card">
@@ -1736,8 +2124,9 @@ export default function AdminPanel() {
         {/* CAFES TAB */}
         {activeTab === 'cafes' && (
           <div className="pane-layout">
-            <div className="form-card glass-card">
-              <h2>Create New Cafe</h2>
+            {isSuperAdminSession && (
+              <div className="form-card glass-card">
+                <h2>Create New Cafe</h2>
               <form onSubmit={handleCreateCafe}>
                 <div className="form-group">
                   <label>Cafe Name *</label>
@@ -1799,13 +2188,48 @@ export default function AdminPanel() {
                 </div>
                 <div className="form-group">
                   <label>Admin Access Password *</label>
-                  <input 
-                    type="password" 
-                    placeholder="Set password for this cafe admin portal" 
-                    value={cafeAdminPassword} 
-                    onChange={(e) => setCafeAdminPassword(e.target.value)}
-                    required 
-                  />
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    <input 
+                      type={showCreatePassword ? "text" : "password"} 
+                      placeholder="Set password for this cafe admin portal" 
+                      value={cafeAdminPassword} 
+                      onChange={(e) => setCafeAdminPassword(e.target.value)}
+                      required 
+                      style={{ paddingRight: '45px' }}
+                    />
+                    <button
+                      type="button"
+                      onMouseEnter={() => setShowCreatePassword(true)}
+                      onMouseLeave={() => setShowCreatePassword(false)}
+                      style={{
+                        position: 'absolute',
+                        right: '12px',
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--text-muted)',
+                        cursor: 'pointer',
+                        padding: '8px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        userSelect: 'none',
+                        outline: 'none'
+                      }}
+                      title="Hover to show password"
+                    >
+                      {showCreatePassword ? (
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                          <circle cx="12" cy="12" r="3"></circle>
+                        </svg>
+                      ) : (
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                          <line x1="1" y1="1" x2="23" y2="23"></line>
+                        </svg>
+                      )}
+                    </button>
+                  </div>
                 </div>
                 <div className="form-group">
                   <label>Cafe Logo Image</label>
@@ -1875,10 +2299,11 @@ export default function AdminPanel() {
                 </button>
               </form>
             </div>
+            )}
 
-            <div className="list-card glass-card">
+            <div className="list-card glass-card" style={adminSession ? { gridColumn: '1 / -1', maxWidth: 'none', width: '100%' } : {}}>
               <h2>Cafes Directory</h2>
-              {cafes.length === 0 ? (
+              {displayedCafes.length === 0 ? (
                 <div className="empty-state">
                   <p>No cafes found. Create your first cafe to start!</p>
                 </div>
@@ -1976,30 +2401,74 @@ export default function AdminPanel() {
                         >
                           📱 Menu
                         </a>
-                        {deleteCafeConfirmId === cafe.id ? (
-                          <div className="inline-confirm-row">
+                        {isSuperAdminSession && (
+                          inlineResetPasswordCafeId === cafe.id ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', width: '100%', marginTop: '8px', flexBasis: '100%' }}>
+                              <input 
+                                type="text"
+                                placeholder="New Password"
+                                value={inlineNewPassword}
+                                onChange={(e) => setInlineNewPassword(e.target.value)}
+                                style={{ flex: 1, padding: '4px 8px', fontSize: '0.78rem', height: '28px', minWidth: '80px' }}
+                              />
+                              <button 
+                                type="button"
+                                className="btn-primary"
+                                onClick={() => handleSuperAdminResetPassword(cafe.id)}
+                                style={{ padding: '0 8px', fontSize: '0.75rem', height: '28px', display: 'inline-flex', alignItems: 'center' }}
+                              >
+                                Save
+                              </button>
+                              <button 
+                                type="button"
+                                className="btn-select"
+                                onClick={() => { setInlineResetPasswordCafeId(null); setInlineNewPassword(''); }}
+                                style={{ padding: '0 8px', fontSize: '0.75rem', height: '28px', display: 'inline-flex', alignItems: 'center' }}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              className="btn-select"
+                              onClick={() => {
+                                setInlineResetPasswordCafeId(cafe.id);
+                                setInlineNewPassword('');
+                              }}
+                              style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', border: '1px solid rgba(245, 158, 11, 0.2)' }}
+                            >
+                              🔑 Reset Pass
+                            </button>
+                          )
+                        )}
+
+                        {isSuperAdminSession && (
+                          deleteCafeConfirmId === cafe.id ? (
+                            <div className="inline-confirm-row">
+                              <button 
+                                className="btn-confirm-yes"
+                                onClick={() => handleDeleteCafe(cafe.id)}
+                                title="Confirm deleting this cafe"
+                              >
+                                🗑️ Confirm?
+                              </button>
+                              <button 
+                                className="btn-confirm-no"
+                                onClick={() => setDeleteCafeConfirmId(null)}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
                             <button 
-                              className="btn-confirm-yes"
+                              className="btn-delete-icon"
                               onClick={() => handleDeleteCafe(cafe.id)}
-                              title="Confirm deleting this cafe"
+                              title="Delete Cafe"
                             >
-                              🗑️ Confirm?
+                              🗑️
                             </button>
-                            <button 
-                              className="btn-confirm-no"
-                              onClick={() => setDeleteCafeConfirmId(null)}
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        ) : (
-                          <button 
-                            className="btn-delete-icon"
-                            onClick={() => handleDeleteCafe(cafe.id)}
-                            title="Delete Cafe"
-                          >
-                            🗑️
-                          </button>
+                          )
                         )}
                       </div>
                     </div>

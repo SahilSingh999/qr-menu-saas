@@ -23,25 +23,28 @@ export default function WaiterDashboard() {
   const [selectedCafe, setSelectedCafe] = useState(null);
   const [menuItems, setMenuItems] = useState([]);
   const [selectedOrderForBill, setSelectedOrderForBill] = useState(null);
+  const [isCafeLocked, setIsCafeLocked] = useState(false);
 
   // Raw Inventory states for Waiter view
-  const [rawIngredients, setRawIngredients] = useState(() => {
-    const saved = localStorage.getItem('raw_ingredients_inventory');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [rawIngredients, setRawIngredients] = useState([]);
 
   useEffect(() => {
     const syncIngredients = () => {
-      const saved = localStorage.getItem('raw_ingredients_inventory');
-      if (saved) setRawIngredients(JSON.parse(saved));
+      if (selectedCafe) {
+        const saved = localStorage.getItem(`raw_ingredients_inventory_cafe_${selectedCafe.id}`);
+        setRawIngredients(saved ? JSON.parse(saved) : []);
+      } else {
+        setRawIngredients([]);
+      }
     };
+    syncIngredients();
     window.addEventListener('storage', syncIngredients);
     const interval = setInterval(syncIngredients, 4000);
     return () => {
       window.removeEventListener('storage', syncIngredients);
       clearInterval(interval);
     };
-  }, []);
+  }, [selectedCafe]);
 
   // Sync currency with selected cafe changes
   useEffect(() => {
@@ -144,12 +147,26 @@ export default function WaiterDashboard() {
     }
   };
 
-  // Fetch initial cafes list and validate session cafe ID
+  // Fetch initial cafes list and validate session cafe ID / handle locks
   useEffect(() => {
     const loadInitialData = async () => {
       const data = await fetchCafes();
       if (data && data.length > 0) {
         setCafes(data);
+        
+        // Handle URL parameter lock
+        const params = new URLSearchParams(window.location.search);
+        const cafeQueryId = params.get('cafe');
+        if (cafeQueryId) {
+          const matched = data.find(c => String(c.id) === String(cafeQueryId));
+          if (matched) {
+            setSelectedCafe(matched);
+            setIsCafeLocked(true);
+            setLoginCafeId(matched.id);
+            return;
+          }
+        }
+
         const savedCafeId = localStorage.getItem('waiter_session_cafe_id');
         if (savedCafeId) {
           const matched = data.find(c => String(c.id) === String(savedCafeId));
@@ -241,9 +258,13 @@ export default function WaiterDashboard() {
 
   const handleWaiterLogout = () => {
     setWaiterSession(null);
-    setSelectedCafe(null);
     localStorage.removeItem('waiter_session_name');
     localStorage.removeItem('waiter_session_cafe_id');
+    if (!isCafeLocked) {
+      setSelectedCafe(null);
+    } else if (selectedCafe) {
+      setLoginCafeId(selectedCafe.id);
+    }
   };
 
   // Fetch orders and subscribe to realtime events when selected cafe changes
@@ -507,13 +528,22 @@ export default function WaiterDashboard() {
           )}
 
           <div className="form-group" style={{ margin: 0 }}>
-            <label>Select Cafe Branch</label>
-            <select value={loginCafeId} onChange={(e) => setLoginCafeId(e.target.value)}>
-              <option value="">-- Select Cafe --</option>
-              {cafes.map(c => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
+            <label>Cafe Branch</label>
+            {isCafeLocked && selectedCafe ? (
+              <input 
+                type="text" 
+                value={selectedCafe.name} 
+                disabled 
+                style={{ background: 'rgba(255,255,255,0.04)', color: 'var(--text-muted)', cursor: 'not-allowed' }}
+              />
+            ) : (
+              <select value={loginCafeId} onChange={(e) => setLoginCafeId(e.target.value)}>
+                <option value="">-- Select Cafe --</option>
+                {cafes.filter(c => c.is_activated !== false).map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            )}
           </div>
 
           <div className="form-group" style={{ margin: 0 }}>
@@ -664,10 +694,10 @@ export default function WaiterDashboard() {
                   setSelectedCafe(cafe || null);
                 }}
               >
-                {cafes.length === 0 ? (
+                {cafes.filter(c => c.is_activated !== false).length === 0 ? (
                   <option value="">No Cafes Registered</option>
                 ) : (
-                  cafes.map(cafe => (
+                  cafes.filter(c => c.is_activated !== false).map(cafe => (
                     <option key={cafe.id} value={cafe.id}>{cafe.name}</option>
                   ))
                 )}

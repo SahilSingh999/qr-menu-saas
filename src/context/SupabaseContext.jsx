@@ -39,11 +39,8 @@ export const SupabaseProvider = ({ children }) => {
         .select('*')
         .order('name');
       if (err) {
-        if (err.code === 'PGRST205') {
-          console.warn('cafes table not found. Falling back to LocalStorage.');
-          return getMockData('cafes');
-        }
-        throw err;
+        console.warn('cafes query error. Falling back to LocalStorage:', err);
+        return getMockData('cafes');
       }
       return data;
     } catch (err) {
@@ -115,18 +112,16 @@ export const SupabaseProvider = ({ children }) => {
         .select();
 
       if (err) {
-        if (err.code === 'PGRST205') {
-          const list = getMockData('cafes');
-          const newCafe = { 
-            id: Date.now(), 
-            ...updatedCafePayload, 
-            created_at: new Date().toISOString() 
-          };
-          list.push(newCafe);
-          setMockData('cafes', list);
-          return newCafe;
-        }
-        throw err;
+        console.warn('createCafe query error. Falling back to LocalStorage:', err);
+        const list = getMockData('cafes');
+        const newCafe = { 
+          id: Date.now(), 
+          ...updatedCafePayload, 
+          created_at: new Date().toISOString() 
+        };
+        list.push(newCafe);
+        setMockData('cafes', list);
+        return newCafe;
       }
       return data[0];
     } catch (err) {
@@ -148,13 +143,11 @@ export const SupabaseProvider = ({ children }) => {
         .eq('id', id)
         .select();
       if (err) {
-        if (err.code === 'PGRST205') {
-          const list = getMockData('cafes');
-          const updated = list.map(c => c.id === id ? { ...c, ...updates } : c);
-          setMockData('cafes', updated);
-          return updated.find(c => c.id === id);
-        }
-        throw err;
+        console.warn('updateCafe query error. Falling back to LocalStorage:', err);
+        const list = getMockData('cafes');
+        const updated = list.map(c => c.id === id ? { ...c, ...updates } : c);
+        setMockData('cafes', updated);
+        return updated.find(c => c.id === id);
       }
       return data[0];
     } catch (err) {
@@ -327,6 +320,101 @@ export const SupabaseProvider = ({ children }) => {
       }
 
       return { success: true, cafe: target };
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const verifyRecoveryKey = async (key) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data, error: err } = await supabase
+        .from('cafes')
+        .select('*')
+        .eq('activation_key', key)
+        .single();
+
+      if (err) {
+        if (err.code === 'PGRST116') {
+          return { success: false, message: '❌ Invalid activation key. Please check the code.' };
+        }
+        throw err;
+      }
+
+      const expiry = new Date(data.expires_at);
+      if (expiry < new Date()) {
+        return { success: false, message: '❌ This branch subscription has expired.' };
+      }
+
+      return { success: true, cafe: data };
+    } catch (err) {
+      // Fallback for mock data (LocalStorage mode)
+      const mockList = getMockData('cafes');
+      const target = mockList.find(c => c.activation_key === key);
+      
+      if (!target) {
+        return { success: false, message: '❌ Invalid activation key. Please check the code.' };
+      }
+      
+      const expiry = new Date(target.expires_at || (Date.now() + 365 * 24 * 60 * 60 * 1000));
+      if (expiry < new Date()) {
+        return { success: false, message: '❌ This branch subscription has expired.' };
+      }
+
+      return { success: true, cafe: target };
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchCafeByUsername = async (username) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data, error: err } = await supabase
+        .from('cafes')
+        .select('*')
+        .eq('admin_username', username)
+        .single();
+
+      if (err) {
+        if (err.code === 'PGRST116') {
+          return null;
+        }
+        throw err;
+      }
+      return data;
+    } catch (err) {
+      // Fallback for mock data (LocalStorage mode)
+      const mockList = getMockData('cafes');
+      return mockList.find(c => c.admin_username === username) || null;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchCafeById = async (id) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data, error: err } = await supabase
+        .from('cafes')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (err) {
+        if (err.code === 'PGRST116') {
+          return null;
+        }
+        throw err;
+      }
+      return data;
+    } catch (err) {
+      // Fallback for mock data (LocalStorage mode)
+      const mockList = getMockData('cafes');
+      return mockList.find(c => String(c.id) === String(id)) || null;
     } finally {
       setLoading(false);
     }
@@ -940,7 +1028,10 @@ export const SupabaseProvider = ({ children }) => {
     fetchStaff,
     createStaff,
     deleteStaff,
-    validateActivationKey
+    validateActivationKey,
+    fetchCafeByUsername,
+    fetchCafeById,
+    verifyRecoveryKey
   };
 
   return (

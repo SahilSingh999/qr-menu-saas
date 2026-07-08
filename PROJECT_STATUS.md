@@ -1,4 +1,12 @@
-# Project Status: QR Menu SaaS Transition
+
+
+## How to Continue Work Later
+1. Open `http://localhost:5173/admin`.
+2. If you were previously logged in as a Super Admin or a specific cafe owner, the app will automatically restore the session from `localStorage` and show the same interface you left.
+3. All authentication flags (`admin_session_cafe_id` and `is_super_admin_session`) are persisted, so you can close the browser and return later without losing your workspace context.
+4. To reset the session, use the red **Log Out Cafe** button at the top right of the admin panel.
+
+---
 
 This document logs the current development status, completed deliverables, remaining roadmap objectives, and next steps for converting the single-tenant QR Menu application into a multi-tenant SaaS.
 
@@ -9,7 +17,7 @@ Transitioning the restaurant ordering application into a multi-tenant SaaS archi
 
 ---
 
-## ✅ Completed Features (1 through 7)
+## ✅ Completed Features (1 through 9)
 
 - **Feature 1: Database Schema Expansion**
   * Added `activation_key` (text, unique), `is_activated` (boolean, default false), and `expires_at` (timestamptz, 1 year expiry) columns to the `cafes` table.
@@ -34,16 +42,23 @@ Transitioning the restaurant ordering application into a multi-tenant SaaS archi
 - **Feature 7: Password Setup & Activation (Step 2)**
   * Enabled the security password setup input field, integrated an absolute hold-to-reveal eye toggle button, implemented storage logo image uploading, and structured the final cafe profile activation update.
 
+- **Feature 8: Owner Login Dropdown Filtering**
+  * Modified the `<select>` element inside the Cafe Owner Access login view in `AdminPanel.jsx` to filter out non-activated cafes (by checking `c.is_activated !== false`).
+
+- **Feature 9: Cafe Isolation using `cafe_id`**
+  * Enforced UI scope limits so Cafe Owners cannot view or use the Cafe creation form, delete branch buttons, or access un-isolated cafe statistics.
+  * Isolated localStorage-based raw ingredients inventory lists to be separated per-cafe ID (under `raw_ingredients_inventory_cafe_${cafeId}`).
+  * Filtered un-activated cafes out of all service staff and waiter selection screens.
+  * Modified the global customer preview link in Navbar to automatically fallback to the first active/activated cafe branch.
+
 ---
 
 ## 🚧 Features in Progress
-- **None** (Feature 7 complete; awaiting user SQL DDL query execution on Supabase console).
+- **None**
 
 ---
 
-## 📋 Remaining Features (8 through 12)
-- [ ] **Feature 8**: Owner login (Hide un-activated cafes from the owner access branch dropdown).
-- [ ] **Feature 9**: Cafe isolation using `cafe_id` (Filter menu items, orders, staff, etc. by tenant branch).
+## 📋 Remaining Features (10 through 12)
 - [ ] **Feature 10**: Super Admin dashboard.
 - [ ] **Feature 11**: Theme management.
 - [ ] **Feature 12**: Subscription plans.
@@ -51,9 +66,13 @@ Transitioning the restaurant ordering application into a multi-tenant SaaS archi
 ---
 
 ## 📁 Files Modified Today
-*   [src/context/SupabaseContext.jsx](file:///d:/qr-menu-saas/src/context/SupabaseContext.jsx): Added key validation database logic and provider exports.
-*   [src/components/AdminPanel.jsx](file:///d:/qr-menu-saas/src/components/AdminPanel.jsx): Added onboarding wizard states, details setup form inputs, credentials password setup field with hold-to-reveal SVG toggles, and logo uploading submission.
-*   [supabase/migrations/20260705000001_add_onboarding_fields.sql](file:///d:/qr-menu-saas/supabase/migrations/20260705000001_add_onboarding_fields.sql): Created DDL statements to add custom onboarding profile columns to `cafes`.
+*   [src/components/AdminPanel.jsx](file:///d:/qr-menu-saas/src/components/AdminPanel.jsx): Filtered Owner dropdown, hid cafe creation form & delete buttons from branch owners, isolated raw inventory by cafe, corrected metrics leakages, replaced dropdown login with secure username login, added URL param locks, and updated onboarding Step 2 to capture admin usernames.
+*   [src/components/WaiterDashboard.jsx](file:///d:/qr-menu-saas/src/components/WaiterDashboard.jsx): Filtered waiter select dropdowns to hide unactivated cafes, isolated raw ingredients by active selectedCafe, and added URL parameter locks.
+*   [src/components/CustomerView.jsx](file:///d:/qr-menu-saas/src/components/CustomerView.jsx): Scoped raw inventory deductions to the active cafe ID.
+*   [src/components/Navbar.jsx](file:///d:/qr-menu-saas/src/components/Navbar.jsx): Adjusted customer preview fallback links to resolve the first active cafe branch.
+*   [src/context/SupabaseContext.jsx](file:///d:/qr-menu-saas/src/context/SupabaseContext.jsx): Added single-cafe lookup helper queries (`fetchCafeByUsername` and `fetchCafeById`) with local mock database fallbacks.
+*   [supabase/migrations/20260708000000_add_admin_username.sql](file:///d:/qr-menu-saas/supabase/migrations/20260708000000_add_admin_username.sql): Added migration script to append `admin_username` column to the `cafes` table and seed existing records.
+*   [PROJECT_STATUS.md](file:///d:/qr-menu-saas/PROJECT_STATUS.md): Logged progress records.
 
 ---
 
@@ -64,11 +83,11 @@ Transitioning the restaurant ordering application into a multi-tenant SaaS archi
 ---
 
 ## ▶️ Exact Next Task to Start Tomorrow
-*   **Implement Feature 8: Owner login**
-    *   Modify the dropdown `<select>` element inside the Cafe Owner Access login view in `AdminPanel.jsx` to filter out non-activated cafes (by checking `c.is_activated !== false`).
+*   **Implement Feature 10: Super Admin dashboard**
+    *   Create a dedicated Super Admin authentication checkpoint or login view to isolate SaaS-wide administration (cafes provisioning, key registries, status audits) from regular branch-level cafe owners.
 
 ---
 
 ## 💡 Important Notes for Next Session
-*   Ensure that the Supabase migration script adding `location`, `phone`, and `description` is executed in the user's Supabase dashboard before starting.
-*   The login dropdown filter should evaluate `is_activated !== false` (not `=== true`) so that legacy active cafes (which might have `is_activated` as null) remain visible and accessible.
+*   Ensure that database operations remain isolated under separate tenant roles if RLS is enabled in Supabase.
+*   Confirm Super Admin dashboard authentication credentials or secure access routes.

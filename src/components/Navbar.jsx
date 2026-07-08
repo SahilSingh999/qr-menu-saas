@@ -15,7 +15,8 @@ export default function Navbar() {
       try {
         const cafes = await fetchCafes();
         if (cafes && cafes.length > 0) {
-          setFirstCafeId(cafes[0].id);
+          const activeCafe = cafes.find(c => c.is_activated !== false) || cafes[0];
+          setFirstCafeId(activeCafe.id);
         }
       } catch (e) {
         console.error('Error fetching cafes for navbar:', e);

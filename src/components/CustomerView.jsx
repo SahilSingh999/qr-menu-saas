@@ -1183,12 +1183,13 @@ export default function CustomerView() {
   const deductIngredientsForOrderItem = (menuItem, quantity) => {
     if (!menuItem.recipe || !Array.isArray(menuItem.recipe)) return;
     
-    const saved = localStorage.getItem('raw_ingredients_inventory');
+    const targetCafeId = cafe?.id || cafeId;
+    const saved = localStorage.getItem(`raw_ingredients_inventory_cafe_${targetCafeId}`);
     if (!saved) return;
     
     let rawList = JSON.parse(saved);
     let updated = false;
-
+ 
     for (const step of menuItem.recipe) {
       rawList = rawList.map(ing => {
         if (ing.id === parseInt(step.ingredientId)) {
@@ -1198,9 +1199,9 @@ export default function CustomerView() {
         return ing;
       });
     }
-
+ 
     if (updated) {
-      localStorage.setItem('raw_ingredients_inventory', JSON.stringify(rawList));
+      localStorage.setItem(`raw_ingredients_inventory_cafe_${targetCafeId}`, JSON.stringify(rawList));
       window.dispatchEvent(new Event('storage'));
     }
   };
