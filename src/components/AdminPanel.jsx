@@ -550,9 +550,7 @@ export default function AdminPanel() {
     setIsSuperAdminSession(false);
     localStorage.removeItem('admin_session_cafe_id');
     localStorage.removeItem('is_super_admin_session');
-    if (!isCafeLocked) {
-      setSelectedCafe(null);
-    }
+    setSelectedCafe(null);
   };
 
   const handleVerifyRecoveryKey = async () => {
@@ -652,6 +650,12 @@ export default function AdminPanel() {
       setCurrencyCode(selectedCafe.currency);
     }
   }, [selectedCafe]);
+
+  useEffect(() => {
+    if (isSuperAdminSession && !selectedCafe) {
+      setActiveTab('saas_overview');
+    }
+  }, [isSuperAdminSession, selectedCafe]);
 
   const handleCreateStaff = async (e) => {
     e.preventDefault();
@@ -1632,12 +1636,26 @@ export default function AdminPanel() {
       {/* SaaS Admin Header */}
       <div className="admin-page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
         <div className="admin-page-title-block">
-          <div className="admin-title-eyebrow">QR MENU SAAS — PORTAL</div>
-          <h1 className="admin-page-h1">Portal Console</h1>
-          <p className="admin-sub" style={{ margin: 0 }}>Manage cafes, generate QR stickers, configure menus &amp; simulate live table events.</p>
+          <div className="admin-title-eyebrow">
+            {isSuperAdminSession 
+              ? (selectedCafe ? "QR MENU SAAS — SUPER ADMIN (IMPERSONATING)" : "QR MENU SAAS — SUPER ADMIN PORTAL") 
+              : "QR MENU SAAS — OWNER PORTAL"}
+          </div>
+          <h1 className="admin-page-h1">
+            {isSuperAdminSession 
+              ? (selectedCafe ? `Workspace: ${selectedCafe.name}` : "Super Admin Console") 
+              : "Portal Console"}
+          </h1>
+          <p className="admin-sub" style={{ margin: 0 }}>
+            {isSuperAdminSession 
+              ? (selectedCafe 
+                  ? "Configuring menu items, waiter pins, live orders, and raw inventory audits." 
+                  : "Provision new branches, register activation keys, inspect audits, and reset credentials.") 
+              : "Manage cafes, generate QR stickers, configure menus & simulate live table events."}
+          </p>
         </div>
 
-        {adminSession && (
+        {(adminSession || isSuperAdminSession) && (
           <button 
             className="btn-select" 
             onClick={handleAdminLogout} 
@@ -1652,7 +1670,7 @@ export default function AdminPanel() {
               fontSize: '0.85rem'
             }}
           >
-            🚪 Log Out Cafe
+            {isSuperAdminSession ? '🛡️ Log Out SaaS' : '🚪 Log Out Cafe'}
           </button>
         )}
 
@@ -1683,6 +1701,55 @@ export default function AdminPanel() {
         )}
       </div>
 
+      {/* Super Admin Impersonation Banner */}
+      {isSuperAdminSession && selectedCafe && (
+        <div className="impersonation-banner" style={{
+          background: 'rgba(245, 158, 11, 0.12)',
+          border: '1px solid rgba(245, 158, 11, 0.3)',
+          borderRadius: '12px',
+          padding: '14px 20px',
+          marginBottom: '20px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: '12px',
+          color: '#f59e0b',
+          fontSize: '0.9rem',
+          fontWeight: 500,
+          marginTop: '10px'
+        }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '1.1rem' }}>🚨</span>
+            <span>
+              <strong>Active Workspace Mode:</strong> Impersonating <strong>{selectedCafe.name}</strong>. You are currently managing this cafe branch's catalog, staff, and live orders.
+            </span>
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedCafe(null);
+              setActiveTab('saas_overview');
+            }}
+            style={{
+              background: '#f59e0b',
+              color: '#111',
+              border: 'none',
+              borderRadius: '8px',
+              padding: '6px 14px',
+              cursor: 'pointer',
+              fontWeight: 'bold',
+              fontSize: '0.8rem',
+              transition: 'background 0.2s',
+              whiteSpace: 'nowrap'
+            }}
+            onMouseOver={(e) => e.currentTarget.style.background = '#d97706'}
+            onMouseOut={(e) => e.currentTarget.style.background = '#f59e0b'}
+          >
+            Exit Workspace
+          </button>
+        </div>
+      )}
+
       {/* Admin Toast Alert Banner */}
       {adminAlertMsg && (
         <div className="admin-alert-banner animated-slide-down">
@@ -1699,82 +1766,225 @@ export default function AdminPanel() {
 
       {/* Global Stat Row */}
       <section className="stats-row">
-        <div className="stat-card glass-card">
-          <div className="stat-icon icon-cafe">🏠</div>
-          <div className="stat-info">
-            <h3>Total Cafes</h3>
-            <p className="stat-number">{displayedCafes.length}</p>
-          </div>
-        </div>
-        <div className="stat-card glass-card">
-          <div className="stat-icon icon-menu">🍔</div>
-          <div className="stat-info">
-            <h3>Menu Items</h3>
-            <p className="stat-number">
-              {selectedCafe ? menuItems.length : '-'}
-            </p>
-          </div>
-        </div>
-        <div className="stat-card glass-card">
-          <div className="stat-icon icon-orders">⚡</div>
-          <div className="stat-info">
-            <h3>Live Orders</h3>
-            <p className="stat-number">
-              {selectedCafe ? orders.filter(o => o.status !== 'completed' && o.status !== 'cancelled' && o.status !== 'bill_approved').length : '-'}
-            </p>
-          </div>
-        </div>
+        {isSuperAdminSession && !selectedCafe ? (
+          <>
+            <div className="stat-card glass-card">
+              <div className="stat-icon icon-cafe">🏢</div>
+              <div className="stat-info">
+                <h3>Total Cafes</h3>
+                <p className="stat-number">{cafes.length}</p>
+              </div>
+            </div>
+            <div className="stat-card glass-card">
+              <div className="stat-icon icon-menu" style={{ color: '#10b981', background: 'rgba(16, 185, 129, 0.1)' }}>✅</div>
+              <div className="stat-info">
+                <h3>Activated</h3>
+                <p className="stat-number">{cafes.filter(c => c.is_activated).length}</p>
+              </div>
+            </div>
+            <div className="stat-card glass-card">
+              <div className="stat-icon icon-orders" style={{ color: '#f59e0b', background: 'rgba(245, 158, 11, 0.1)' }}>⏳</div>
+              <div className="stat-info">
+                <h3>Pending Keys</h3>
+                <p className="stat-number">{cafes.filter(c => !c.is_activated).length}</p>
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="stat-card glass-card">
+              <div className="stat-icon icon-cafe">🗂️</div>
+              <div className="stat-info">
+                <h3>Total Tables</h3>
+                <p className="stat-number">{selectedCafe?.table_count || 0}</p>
+              </div>
+            </div>
+            <div className="stat-card glass-card">
+              <div className="stat-icon icon-menu">🍔</div>
+              <div className="stat-info">
+                <h3>Menu Items</h3>
+                <p className="stat-number">{menuItems.length}</p>
+              </div>
+            </div>
+            <div className="stat-card glass-card">
+              <div className="stat-icon icon-orders">⚡</div>
+              <div className="stat-info">
+                <h3>Live Orders</h3>
+                <p className="stat-number">
+                  {orders.filter(o => o.status !== 'completed' && o.status !== 'cancelled' && o.status !== 'bill_approved').length}
+                </p>
+              </div>
+            </div>
+          </>
+        )}
       </section>
 
       {/* Configuration & Management Area */}
       <div className="tabs-container">
         <div className="tab-buttons">
-          <button 
-            className={`tab-btn ${activeTab === 'cafes' ? 'active' : ''}`}
-            onClick={() => setActiveTab('cafes')}
-          >
-            🏠 Cafes Manager
-          </button>
-          <button 
-            className={`tab-btn ${activeTab === 'staff' ? 'active' : ''}`}
-            onClick={() => setActiveTab('staff')}
-          >
-            👥 Staff & PINs
-          </button>
-          <button 
-            className={`tab-btn ${activeTab === 'menu' ? 'active' : ''}`}
-            onClick={() => setActiveTab('menu')}
-          >
-            🍔 Menu Manager
-          </button>
-          <button 
-            className={`tab-btn ${activeTab === 'qr_stickers' ? 'active' : ''}`}
-            onClick={() => setActiveTab('qr_stickers')}
-          >
-            🖨️ QR & Stickers
-          </button>
-          <button
-            className={`tab-btn ${activeTab === 'orders' ? 'active' : ''}`}
-            onClick={() => setActiveTab('orders')}
-          >
-            📋 Order Simulator
-          </button>
-          <button
-            className={`tab-btn ${activeTab === 'sales' ? 'active' : ''}`}
-            onClick={() => setActiveTab('sales')}
-          >
-            📊 Sales Report
-          </button>
-          <button
-            className={`tab-btn ${activeTab === 'raw_inventory' ? 'active' : ''}`}
-            onClick={() => setActiveTab('raw_inventory')}
-          >
-            📦 Raw Inventory
-          </button>
+          {isSuperAdminSession && !selectedCafe ? (
+            <>
+              <button 
+                className={`tab-btn ${activeTab === 'saas_overview' ? 'active' : ''}`}
+                onClick={() => setActiveTab('saas_overview')}
+              >
+                🛡️ SaaS Overview
+              </button>
+              <button 
+                className={`tab-btn ${activeTab === 'cafes' ? 'active' : ''}`}
+                onClick={() => setActiveTab('cafes')}
+              >
+                🏠 Cafes Registry
+              </button>
+            </>
+          ) : (
+            <>
+              {!isSuperAdminSession && (
+                <button 
+                  className={`tab-btn ${activeTab === 'cafes' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('cafes')}
+                >
+                  🏠 Cafe Branch
+                </button>
+              )}
+              <button 
+                className={`tab-btn ${activeTab === 'staff' ? 'active' : ''}`}
+                onClick={() => setActiveTab('staff')}
+              >
+                👥 Staff & PINs
+              </button>
+              <button 
+                className={`tab-btn ${activeTab === 'menu' ? 'active' : ''}`}
+                onClick={() => setActiveTab('menu')}
+              >
+                🍔 Menu Manager
+              </button>
+              <button 
+                className={`tab-btn ${activeTab === 'qr_stickers' ? 'active' : ''}`}
+                onClick={() => setActiveTab('qr_stickers')}
+              >
+                🖨️ QR & Stickers
+              </button>
+              <button
+                className={`tab-btn ${activeTab === 'orders' ? 'active' : ''}`}
+                onClick={() => setActiveTab('orders')}
+              >
+                📋 Order Simulator
+              </button>
+              <button
+                className={`tab-btn ${activeTab === 'sales' ? 'active' : ''}`}
+                onClick={() => setActiveTab('sales')}
+              >
+                📊 Sales Report
+              </button>
+              <button
+                className={`tab-btn ${activeTab === 'raw_inventory' ? 'active' : ''}`}
+                onClick={() => setActiveTab('raw_inventory')}
+              >
+                📦 Raw Inventory
+              </button>
+            </>
+          )}
         </div>
       </div>
 
       <div className="tab-content">
+        {/* SAAS OVERVIEW TAB */}
+        {activeTab === 'saas_overview' && isSuperAdminSession && (
+          <div className="saas-overview-tab animated-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            {/* Quick Cards Grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
+              <div className="stat-card glass-card" style={{ padding: '24px', display: 'flex', gap: '16px', alignItems: 'center' }}>
+                <div style={{ fontSize: '2.5rem', background: 'rgba(0, 242, 254, 0.1)', color: '#00f2fe', width: '60px', height: '60px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>🏢</div>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Cafe Branches</h4>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '1.8rem', fontWeight: 'bold' }}>{cafes.length}</p>
+                </div>
+              </div>
+
+              <div className="stat-card glass-card" style={{ padding: '24px', display: 'flex', gap: '16px', alignItems: 'center' }}>
+                <div style={{ fontSize: '2.5rem', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', width: '60px', height: '60px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✅</div>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Activated Branches</h4>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '1.8rem', fontWeight: 'bold' }}>{cafes.filter(c => c.is_activated).length}</p>
+                </div>
+              </div>
+
+              <div className="stat-card glass-card" style={{ padding: '24px', display: 'flex', gap: '16px', alignItems: 'center' }}>
+                <div style={{ fontSize: '2.5rem', background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', width: '60px', height: '60px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>⏳</div>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Pending Keys</h4>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '1.8rem', fontWeight: 'bold' }}>{cafes.filter(c => !c.is_activated).length}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Pending Key Table */}
+            <div className="form-card glass-card" style={{ width: '100%', maxWidth: 'none' }}>
+              <h2>🔑 Unused Activation Keys</h2>
+              <p className="admin-sub" style={{ marginBottom: '16px' }}>Provide these keys to cafe owners to let them activate their branch and setup credentials.</p>
+              
+              {cafes.filter(c => !c.is_activated).length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)', border: '1px dashed rgba(255,255,255,0.08)', borderRadius: '12px' }}>
+                  🎉 No pending activations! All cafes are fully set up.
+                </div>
+              ) : (
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.88rem' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                        <th style={{ padding: '12px 8px', color: 'var(--text-muted)' }}>Cafe Name</th>
+                        <th style={{ padding: '12px 8px', color: 'var(--text-muted)' }}>Activation Key</th>
+                        <th style={{ padding: '12px 8px', color: 'var(--text-muted)' }}>Created At</th>
+                        <th style={{ padding: '12px 8px', color: 'var(--text-muted)', textAlign: 'right' }}>Copy Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cafes.filter(c => !c.is_activated).map(cafe => (
+                        <tr key={cafe.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                          <td style={{ padding: '12px 8px', fontWeight: 'bold' }}>{cafe.name}</td>
+                          <td style={{ padding: '12px 8px' }}>
+                            <code style={{ background: 'rgba(255,255,255,0.06)', padding: '4px 8px', borderRadius: '6px', fontFamily: 'monospace', color: '#00f2fe' }}>
+                              {cafe.activation_key}
+                            </code>
+                          </td>
+                          <td style={{ padding: '12px 8px', color: 'var(--text-muted)' }}>
+                            {new Date(cafe.created_at).toLocaleDateString()}
+                          </td>
+                          <td style={{ padding: '12px 8px', textAlign: 'right' }}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(cafe.activation_key);
+                                showAdminAlert(`🔑 Key for ${cafe.name} copied!`);
+                              }}
+                              className="btn-select"
+                              style={{ padding: '4px 10px', fontSize: '0.75rem' }}
+                            >
+                              📋 Copy Key
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Information Card */}
+            <div className="glass-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '12px', background: 'rgba(255, 255, 255, 0.02)' }}>
+              <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>ℹ️ Super Admin Guide</h3>
+              <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: '1.6' }}>
+                As a SaaS Super Admin, you are responsible for provisioning new cafe branches. To set up a new cafe, go to the <strong>🏠 Cafes Registry</strong> tab, specify a name and default credentials, and click "Create Cafe". This generates a cryptographically secure activation key.
+              </p>
+              <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: '1.6' }}>
+                Copy the activation key and send it to the cafe owner. The owner will enter the key on the login page and set up their custom administrator username and password. After onboarding, the owner will run their cafe branch independently.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* STAFF & PINS TAB */}
         {activeTab === 'staff' && (
           !selectedCafe ? (
@@ -2388,9 +2598,16 @@ export default function AdminPanel() {
                       <div className="cafe-actions">
                         <button 
                           className="btn-select"
-                          onClick={() => setSelectedCafe(cafe)}
+                          onClick={() => {
+                            setSelectedCafe(cafe);
+                            if (isSuperAdminSession) {
+                              setActiveTab('menu');
+                            }
+                          }}
                         >
-                          {selectedCafe?.id === cafe.id ? 'Active' : 'Manage'}
+                          {isSuperAdminSession 
+                            ? (selectedCafe?.id === cafe.id ? 'Active Workspace' : 'Manage Workspace ➔')
+                            : (selectedCafe?.id === cafe.id ? 'Active' : 'Manage')}
                         </button>
                         <a 
                           href={`/table/4?cafe=${cafe.id}`} 

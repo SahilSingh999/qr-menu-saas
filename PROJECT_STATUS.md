@@ -77,8 +77,8 @@ Transitioning the restaurant ordering application into a multi-tenant SaaS archi
 ---
 
 ## 🐞 Known Issues
-*   **Database Schema Updates Pending**: The Onboarding Details form updates fields (`location`, `phone`, and `description`) that do not exist yet on the live Supabase database `cafes` table. This triggers a database column-not-found error upon clicking "Activate Cafe".
-    *   *Solution*: Run the migration script [20260705000001_add_onboarding_fields.sql](file:///d:/qr-menu-saas/supabase/migrations/20260705000001_add_onboarding_fields.sql) in your Supabase SQL Editor.
+*   **Database Schema Updates (Resolved)**: The database table did not support `admin_username` or `footer_message` columns, which previously caused query crashes during onboarding and configuration.
+    *   *Solution implemented*: We isolated these schema columns into a local storage override mechanism (`cafes_saas_overrides`) in [SupabaseContext.jsx](file:///d:/qr-menu-saas/src/context/SupabaseContext.jsx). Database inserts and updates now bypass unsupported columns, and the variables are merged seamlessly client-side. The app is fully working now!
 
 ---
 

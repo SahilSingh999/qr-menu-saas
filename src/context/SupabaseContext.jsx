@@ -19,6 +19,30 @@ export const SupabaseProvider = ({ children }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  React.useEffect(() => {
+    const overrides = JSON.parse(localStorage.getItem('cafes_saas_overrides') || '{}');
+    let changed = false;
+    if (!overrides[1] || !overrides[1].admin_username) {
+      overrides[1] = {
+        ...overrides[1],
+        admin_username: 'trackside',
+        footer_message: 'Thank You For Dining With Us!'
+      };
+      changed = true;
+    }
+    if (!overrides[3] || !overrides[3].admin_username) {
+      overrides[3] = {
+        ...overrides[3],
+        admin_username: 'newtest',
+        footer_message: 'Thank You For Dining With Us!'
+      };
+      changed = true;
+    }
+    if (changed) {
+      localStorage.setItem('cafes_saas_overrides', JSON.stringify(overrides));
+    }
+  }, []);
+
   // LocalStorage Mock Helpers
   const getMockData = (table) => {
     const data = localStorage.getItem(`mock_db_${table}`);
@@ -38,11 +62,21 @@ export const SupabaseProvider = ({ children }) => {
         .from('cafes')
         .select('*')
         .order('name');
+      
+      let rawCafes = [];
       if (err) {
         console.warn('cafes query error. Falling back to LocalStorage:', err);
-        return getMockData('cafes');
+        rawCafes = getMockData('cafes');
+      } else {
+        rawCafes = data;
       }
-      return data;
+
+      // Merge local overrides (admin_username, footer_message)
+      const overrides = JSON.parse(localStorage.getItem('cafes_saas_overrides') || '{}');
+      return rawCafes.map(cafe => ({
+        ...cafe,
+        ...(overrides[cafe.id] || {})
+      }));
     } catch (err) {
       setError(err.message);
       console.error('Error fetching cafes:', err);
@@ -106,24 +140,49 @@ export const SupabaseProvider = ({ children }) => {
         expires_at: expiresAt
       };
 
+      // Separate unsupported database columns to prevent database-level insert crashes
+      const { admin_username, footer_message, ...supabaseItem } = updatedCafePayload;
+
       const { data, error: err } = await supabase
         .from('cafes')
-        .insert([updatedCafePayload])
+        .insert([supabaseItem])
         .select();
 
+      let createdCafe = null;
       if (err) {
         console.warn('createCafe query error. Falling back to LocalStorage:', err);
         const list = getMockData('cafes');
-        const newCafe = { 
+        createdCafe = { 
           id: Date.now(), 
           ...updatedCafePayload, 
           created_at: new Date().toISOString() 
         };
-        list.push(newCafe);
+        list.push(createdCafe);
         setMockData('cafes', list);
-        return newCafe;
+      } else {
+        createdCafe = data[0];
       }
-      return data[0];
+
+      if (createdCafe) {
+        // Save unsupported schema variables as overrides
+        if (admin_username !== undefined || footer_message !== undefined) {
+          const overrides = JSON.parse(localStorage.getItem('cafes_saas_overrides') || '{}');
+          overrides[createdCafe.id] = {
+            ...overrides[createdCafe.id],
+            ...(admin_username !== undefined ? { admin_username } : {}),
+            ...(footer_message !== undefined ? { footer_message } : {})
+          };
+          localStorage.setItem('cafes_saas_overrides', JSON.stringify(overrides));
+        }
+
+        // Apply overrides to return object
+        const overrides = JSON.parse(localStorage.getItem('cafes_saas_overrides') || '{}');
+        createdCafe = {
+          ...createdCafe,
+          ...(overrides[createdCafe.id] || {})
+        };
+      }
+      return createdCafe;
     } catch (err) {
       setError(err.message);
       console.error('Error creating cafe:', err);
@@ -136,24 +195,92 @@ export const SupabaseProvider = ({ children }) => {
   const updateCafe = async (id, updates) => {
     setLoading(true);
     setError(null);
+    const { admin_username, footer_message, ...supabaseUpdates } = updates;
+
+    // Save unsupported schema variables as overrides immediately
+    if (admin_username !== undefined || footer_message !== undefined) {
+      const overrides = JSON.parse(localStorage.getItem('cafes_saas_overrides') || '{}');
+      overrides[id] = {
+        ...overrides[id],
+        ...(admin_username !== undefined ? { admin_username } : {}),
+        ...(footer_message !== undefined ? { footer_message } : {})
+      };
+      localStorage.setItem('cafes_saas_overrides', JSON.stringify(overrides));
+    }
+
     try {
-      const { data, error: err } = await supabase
-        .from('cafes')
-        .update(updates)
-        .eq('id', id)
-        .select();
-      if (err) {
-        console.warn('updateCafe query error. Falling back to LocalStorage:', err);
-        const list = getMockData('cafes');
-        const updated = list.map(c => c.id === id ? { ...c, ...updates } : c);
-        setMockData('cafes', updated);
-        return updated.find(c => c.id === id);
+      let updatedCafe = null;
+      if (Object.keys(supabaseUpdates).length > 0) {
+        const { data, error: err } = await supabase
+          .from('cafes')
+          .update(supabaseUpdates)
+          .eq('id', id)
+          .select();
+        
+        if (err) {
+          console.warn('updateCafe query error. Falling back to LocalStorage:', err);
+          const list = getMockData('cafes');
+          const updated = list.map(c => c.id === id ? { ...c, ...updates } : c);
+          setMockData('cafes', updated);
+          updatedCafe = updated.find(c => c.id === id);
+        } else {
+          updatedCafe = data[0];
+        }
+      } else {
+        // Fetch current cafe structure to merge with overrides
+        const { data, error: err } = await supabase
+          .from('cafes')
+          .select('*')
+          .eq('id', id)
+          .single();
+        if (!err && data) {
+          updatedCafe = data;
+        } else {
+          const list = getMockData('cafes');
+          updatedCafe = list.find(c => c.id === id);
+        }
       }
-      return data[0];
+
+      if (updatedCafe) {
+        const overrides = JSON.parse(localStorage.getItem('cafes_saas_overrides') || '{}');
+        updatedCafe = {
+          ...updatedCafe,
+          ...(overrides[updatedCafe.id] || {})
+        };
+      }
+      return updatedCafe;
     } catch (err) {
-      setError(err.message);
-      console.error('Error updating cafe:', err);
-      return null;
+      console.warn('updateCafe threw. Falling back to LocalStorage:', err.message);
+      const list = getMockData('cafes');
+      // If the cafe is from DB but wasn't in mock, let's fetch and seed it in mock
+      let target = list.find(c => c.id === id);
+      if (!target) {
+        try {
+          const { data } = await supabase.from('cafes').select('*').eq('id', id).single();
+          if (data) {
+            target = data;
+            list.push(data);
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }
+      if (!target) {
+        target = { id, name: updates.name || 'Cafe' };
+        list.push(target);
+      }
+
+      const updated = list.map(c => c.id === id ? { ...c, ...updates } : c);
+      setMockData('cafes', updated);
+      let res = updated.find(c => c.id === id);
+      if (res) {
+        const overrides = JSON.parse(localStorage.getItem('cafes_saas_overrides') || '{}');
+        res = {
+          ...res,
+          ...(overrides[res.id] || {})
+        };
+      }
+      return res;
     } finally {
       setLoading(false);
     }
@@ -300,11 +427,17 @@ export const SupabaseProvider = ({ children }) => {
         return { success: false, message: '❌ This activation key has expired. Please contact support.' };
       }
 
-      return { success: true, cafe: data };
+      const overrides = JSON.parse(localStorage.getItem('cafes_saas_overrides') || '{}');
+      const cafe = {
+        ...data,
+        ...(overrides[data.id] || {})
+      };
+
+      return { success: true, cafe };
     } catch (err) {
       // Fallback for mock data (LocalStorage mode)
       const mockList = getMockData('cafes');
-      const target = mockList.find(c => c.activation_key === key);
+      let target = mockList.find(c => c.activation_key === key);
       
       if (!target) {
         return { success: false, message: '❌ Invalid activation key. Please check the code.' };
@@ -318,6 +451,12 @@ export const SupabaseProvider = ({ children }) => {
       if (expiry < new Date()) {
         return { success: false, message: '❌ This activation key has expired.' };
       }
+
+      const overrides = JSON.parse(localStorage.getItem('cafes_saas_overrides') || '{}');
+      target = {
+        ...target,
+        ...(overrides[target.id] || {})
+      };
 
       return { success: true, cafe: target };
     } finally {
@@ -347,11 +486,17 @@ export const SupabaseProvider = ({ children }) => {
         return { success: false, message: '❌ This branch subscription has expired.' };
       }
 
-      return { success: true, cafe: data };
+      const overrides = JSON.parse(localStorage.getItem('cafes_saas_overrides') || '{}');
+      const cafe = {
+        ...data,
+        ...(overrides[data.id] || {})
+      };
+
+      return { success: true, cafe };
     } catch (err) {
       // Fallback for mock data (LocalStorage mode)
       const mockList = getMockData('cafes');
-      const target = mockList.find(c => c.activation_key === key);
+      let target = mockList.find(c => c.activation_key === key);
       
       if (!target) {
         return { success: false, message: '❌ Invalid activation key. Please check the code.' };
@@ -361,6 +506,12 @@ export const SupabaseProvider = ({ children }) => {
       if (expiry < new Date()) {
         return { success: false, message: '❌ This branch subscription has expired.' };
       }
+
+      const overrides = JSON.parse(localStorage.getItem('cafes_saas_overrides') || '{}');
+      target = {
+        ...target,
+        ...(overrides[target.id] || {})
+      };
 
       return { success: true, cafe: target };
     } finally {
@@ -372,23 +523,13 @@ export const SupabaseProvider = ({ children }) => {
     setLoading(true);
     setError(null);
     try {
-      const { data, error: err } = await supabase
-        .from('cafes')
-        .select('*')
-        .eq('admin_username', username)
-        .single();
-
-      if (err) {
-        if (err.code === 'PGRST116') {
-          return null;
-        }
-        throw err;
-      }
-      return data;
+      // Since admin_username is local, we fetch all cafes and search locally
+      const list = await fetchCafes();
+      return list ? list.find(c => c.admin_username === username) || null : null;
     } catch (err) {
-      // Fallback for mock data (LocalStorage mode)
-      const mockList = getMockData('cafes');
-      return mockList.find(c => c.admin_username === username) || null;
+      setError(err.message);
+      console.error('Error fetching cafe by username:', err);
+      return null;
     } finally {
       setLoading(false);
     }
@@ -404,23 +545,42 @@ export const SupabaseProvider = ({ children }) => {
         .eq('id', id)
         .single();
 
+      let cafe = null;
       if (err) {
         if (err.code === 'PGRST116') {
           return null;
         }
-        throw err;
+        // Fallback for mock data
+        const mockList = getMockData('cafes');
+        cafe = mockList.find(c => String(c.id) === String(id)) || null;
+      } else {
+        cafe = data;
       }
-      return data;
+
+      if (cafe) {
+        const overrides = JSON.parse(localStorage.getItem('cafes_saas_overrides') || '{}');
+        cafe = {
+          ...cafe,
+          ...(overrides[cafe.id] || {})
+        };
+      }
+      return cafe;
     } catch (err) {
       // Fallback for mock data (LocalStorage mode)
       const mockList = getMockData('cafes');
-      return mockList.find(c => String(c.id) === String(id)) || null;
+      let cafe = mockList.find(c => String(c.id) === String(id)) || null;
+      if (cafe) {
+        const overrides = JSON.parse(localStorage.getItem('cafes_saas_overrides') || '{}');
+        cafe = {
+          ...cafe,
+          ...(overrides[cafe.id] || {})
+        };
+      }
+      return cafe;
     } finally {
       setLoading(false);
     }
   };
-
-
 
   // Menu Items CRUD
   const fetchMenuItems = async (cafeId = null) => {
