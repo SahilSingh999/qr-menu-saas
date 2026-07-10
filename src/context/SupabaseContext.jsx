@@ -599,23 +599,65 @@ export const SupabaseProvider = ({ children }) => {
           if (cafeId) {
             list = list.filter(item => item.cafe_id === cafeId || item.cafe_id === parseInt(cafeId));
           }
-          return list;
+          const stockOverrides = JSON.parse(localStorage.getItem('menu_items_stock_overrides') || '{}');
+          const localOverrides = JSON.parse(localStorage.getItem('menu_items_local_overrides') || '{}');
+          return list.map(item => {
+            const itemOverride = {
+              ...(stockOverrides[item.id] || {}),
+              ...(localOverrides[item.id] || {})
+            };
+            return {
+              ...item,
+              stock: itemOverride.stock !== undefined ? itemOverride.stock : item.stock,
+              low_stock_threshold: itemOverride.low_stock_threshold !== undefined ? itemOverride.low_stock_threshold : item.low_stock_threshold,
+              stock_unit: itemOverride.stock_unit !== undefined ? itemOverride.stock_unit : (item.stock_unit || 'pcs'),
+              recipe: itemOverride.recipe !== undefined ? itemOverride.recipe : (item.recipe || []),
+              availability_status: itemOverride.availability_status !== undefined ? itemOverride.availability_status : (item.availability_status || (item.is_available ? 'available' : 'out_of_stock'))
+            };
+          });
         }
         throw err;
       }
 
-      // Merge with local stock overrides
-      const overrides = JSON.parse(localStorage.getItem('menu_items_stock_overrides') || '{}');
+      // Merge with local overrides
+      const stockOverrides = JSON.parse(localStorage.getItem('menu_items_stock_overrides') || '{}');
+      let localOverrides = JSON.parse(localStorage.getItem('menu_items_local_overrides') || '{}');
+
+      // One-time migration: remove stale null/zero stock entries that were saved by old buggy code.
+      // These entries cause false "Out of Stock" badges for items without an explicitly set stock.
+      let overridesUpdated = false;
+      Object.keys(localOverrides).forEach(id => {
+        const entry = localOverrides[id];
+        if (entry && 'stock' in entry && (entry.stock === null || entry.stock === 0) && !entry._stockExplicitlySet) {
+          delete entry.stock;
+          overridesUpdated = true;
+        }
+      });
+      if (overridesUpdated) {
+        localStorage.setItem('menu_items_local_overrides', JSON.stringify(localOverrides));
+      }
+
       const mergedData = data.map(item => {
-        const itemOverride = overrides[item.id];
+        const itemOverride = {
+          ...(stockOverrides[item.id] || {}),
+          ...(localOverrides[item.id] || {})
+        };
+        // Treat null override stock as "unlimited" (user never set a stock value).
+        // Only apply a numeric stock override if it was explicitly set to a number.
+        const resolvedStock = (itemOverride.stock !== undefined && itemOverride.stock !== null)
+          ? itemOverride.stock
+          : (item.stock !== undefined && item.stock !== null ? item.stock : undefined);
         return {
           ...item,
-          stock: itemOverride && itemOverride.stock !== undefined ? itemOverride.stock : item.stock,
-          low_stock_threshold: itemOverride && itemOverride.low_stock_threshold !== undefined ? itemOverride.low_stock_threshold : item.low_stock_threshold,
-          stock_unit: itemOverride && itemOverride.stock_unit !== undefined ? itemOverride.stock_unit : (item.stock_unit || 'pcs')
+          stock: resolvedStock,
+          low_stock_threshold: itemOverride.low_stock_threshold !== undefined ? itemOverride.low_stock_threshold : item.low_stock_threshold,
+          stock_unit: itemOverride.stock_unit !== undefined ? itemOverride.stock_unit : (item.stock_unit || 'pcs'),
+          recipe: itemOverride.recipe !== undefined ? itemOverride.recipe : [],
+          availability_status: itemOverride.availability_status !== undefined ? itemOverride.availability_status : (item.is_available ? 'available' : 'out_of_stock')
         };
       });
       return mergedData;
+
     } catch (err) {
       setError(err.message);
       console.error('Error fetching menu items:', err);
@@ -623,7 +665,22 @@ export const SupabaseProvider = ({ children }) => {
       if (cafeId) {
         list = list.filter(item => item.cafe_id === cafeId || item.cafe_id === parseInt(cafeId));
       }
-      return list;
+      const stockOverrides = JSON.parse(localStorage.getItem('menu_items_stock_overrides') || '{}');
+      const localOverrides = JSON.parse(localStorage.getItem('menu_items_local_overrides') || '{}');
+      return list.map(item => {
+        const itemOverride = {
+          ...(stockOverrides[item.id] || {}),
+          ...(localOverrides[item.id] || {})
+        };
+        return {
+          ...item,
+          stock: itemOverride.stock !== undefined ? itemOverride.stock : item.stock,
+          low_stock_threshold: itemOverride.low_stock_threshold !== undefined ? itemOverride.low_stock_threshold : item.low_stock_threshold,
+          stock_unit: itemOverride.stock_unit !== undefined ? itemOverride.stock_unit : (item.stock_unit || 'pcs'),
+          recipe: itemOverride.recipe !== undefined ? itemOverride.recipe : (item.recipe || []),
+          availability_status: itemOverride.availability_status !== undefined ? itemOverride.availability_status : (item.availability_status || (item.is_available ? 'available' : 'out_of_stock'))
+        };
+      });
     } finally {
       setLoading(false);
     }
@@ -632,8 +689,8 @@ export const SupabaseProvider = ({ children }) => {
   const createMenuItem = async (item) => {
     setLoading(true);
     setError(null);
-    // Separate stock tracking fields for schema safety
-    const { stock, low_stock_threshold, stock_unit, ...supabaseItem } = item;
+    // Separate stock and other non-DB fields for schema safety
+    const { stock, low_stock_threshold, stock_unit, recipe, availability_status, ...supabaseItem } = item;
     try {
       const { data, error: err } = await supabase
         .from('menu_items')
@@ -654,21 +711,33 @@ export const SupabaseProvider = ({ children }) => {
         throw err;
       }
       const createdItem = data[0];
-      // Store the stock override locally associated with the new ID
-      if (stock !== undefined || low_stock_threshold !== undefined || stock_unit !== undefined) {
-        const overrides = JSON.parse(localStorage.getItem('menu_items_stock_overrides') || '{}');
-        overrides[createdItem.id] = {
-          stock: stock !== undefined ? stock : null,
-          low_stock_threshold: low_stock_threshold !== undefined ? low_stock_threshold : null,
-          stock_unit: stock_unit !== undefined ? stock_unit : 'pcs'
-        };
-        localStorage.setItem('menu_items_stock_overrides', JSON.stringify(overrides));
+      
+      // Store local overrides associated with the new ID.
+      // Only save stock if a non-null, non-undefined value was provided by the user.
+      // Storing null would cause false "Out of Stock" detection on merge.
+      const overrides = JSON.parse(localStorage.getItem('menu_items_local_overrides') || '{}');
+      const overrideEntry = {
+        stock_unit: stock_unit !== undefined ? stock_unit : 'pcs',
+        recipe: recipe !== undefined ? recipe : [],
+        availability_status: availability_status !== undefined ? availability_status : (createdItem.is_available ? 'available' : 'out_of_stock')
+      };
+      // Only include stock / low_stock_threshold if they were explicitly set to a number
+      if (stock !== undefined && stock !== null) {
+        overrideEntry.stock = stock;
+        overrideEntry._stockExplicitlySet = true; // prevents the stale-data purge from removing this
       }
+      if (low_stock_threshold !== undefined && low_stock_threshold !== null) overrideEntry.low_stock_threshold = low_stock_threshold;
+      overrides[createdItem.id] = overrideEntry;
+      localStorage.setItem('menu_items_local_overrides', JSON.stringify(overrides));
+
+
       return {
         ...createdItem,
         stock,
         low_stock_threshold,
-        stock_unit: stock_unit || 'pcs'
+        stock_unit: stock_unit || 'pcs',
+        recipe: recipe || [],
+        availability_status: availability_status || (createdItem.is_available ? 'available' : 'out_of_stock')
       };
     } catch (err) {
       setError(err.message);
@@ -690,19 +759,21 @@ export const SupabaseProvider = ({ children }) => {
   const updateMenuItem = async (id, updates) => {
     setLoading(true);
     setError(null);
-    // Separate stock tracking fields
-    const { stock, low_stock_threshold, stock_unit, ...supabaseUpdates } = updates;
+    // Separate non-DB fields
+    const { stock, low_stock_threshold, stock_unit, recipe, availability_status, ...supabaseUpdates } = updates;
+    
     // Save to overrides immediately
-    if (stock !== undefined || low_stock_threshold !== undefined || stock_unit !== undefined) {
-      const overrides = JSON.parse(localStorage.getItem('menu_items_stock_overrides') || '{}');
-      overrides[id] = {
-        ...overrides[id],
-        ...(stock !== undefined ? { stock } : {}),
-        ...(low_stock_threshold !== undefined ? { low_stock_threshold } : {}),
-        ...(stock_unit !== undefined ? { stock_unit } : {})
-      };
-      localStorage.setItem('menu_items_stock_overrides', JSON.stringify(overrides));
-    }
+    const overrides = JSON.parse(localStorage.getItem('menu_items_local_overrides') || '{}');
+    overrides[id] = {
+      ...(overrides[id] || {}),
+      ...(stock !== undefined ? { stock } : {}),
+      ...(low_stock_threshold !== undefined ? { low_stock_threshold } : {}),
+      ...(stock_unit !== undefined ? { stock_unit } : {}),
+      ...(recipe !== undefined ? { recipe } : {}),
+      ...(availability_status !== undefined ? { availability_status } : {})
+    };
+    localStorage.setItem('menu_items_local_overrides', JSON.stringify(overrides));
+
     try {
       let updatedItem = null;
       if (Object.keys(supabaseUpdates).length > 0) {
@@ -734,20 +805,44 @@ export const SupabaseProvider = ({ children }) => {
         }
       }
       if (!updatedItem) return null;
-      const overrides = JSON.parse(localStorage.getItem('menu_items_stock_overrides') || '{}');
-      const itemOverride = overrides[id] || {};
+      
+      const stockOverrides = JSON.parse(localStorage.getItem('menu_items_stock_overrides') || '{}');
+      const itemOverride = {
+        ...(stockOverrides[id] || {}),
+        ...(overrides[id] || {})
+      };
       return {
         ...updatedItem,
-        stock: itemOverride.stock !== undefined ? itemOverride.stock : updatedItem.stock,
+        stock: (itemOverride.stock !== undefined && itemOverride.stock !== null) ? itemOverride.stock : (updatedItem.stock !== undefined && updatedItem.stock !== null ? updatedItem.stock : undefined),
         low_stock_threshold: itemOverride.low_stock_threshold !== undefined ? itemOverride.low_stock_threshold : updatedItem.low_stock_threshold,
-        stock_unit: itemOverride.stock_unit !== undefined ? itemOverride.stock_unit : (updatedItem.stock_unit || 'pcs')
+        stock_unit: itemOverride.stock_unit !== undefined ? itemOverride.stock_unit : (updatedItem.stock_unit || 'pcs'),
+        recipe: itemOverride.recipe !== undefined ? itemOverride.recipe : [],
+        availability_status: itemOverride.availability_status !== undefined ? itemOverride.availability_status : (updatedItem.is_available ? 'available' : 'out_of_stock')
       };
+
     } catch (err) {
       console.warn('Fallback update for menu item:', err);
       const list = getMockData('menu_items');
       const updated = list.map(m => m.id === id ? { ...m, ...updates } : m);
       setMockData('menu_items', updated);
-      return updated.find(m => m.id === id);
+      
+      const stockOverrides = JSON.parse(localStorage.getItem('menu_items_stock_overrides') || '{}');
+      let res = updated.find(m => m.id === id);
+      if (res) {
+        const itemOverride = {
+          ...(stockOverrides[id] || {}),
+          ...(overrides[id] || {})
+        };
+        res = {
+          ...res,
+          stock: itemOverride.stock !== undefined ? itemOverride.stock : res.stock,
+          low_stock_threshold: itemOverride.low_stock_threshold !== undefined ? itemOverride.low_stock_threshold : res.low_stock_threshold,
+          stock_unit: itemOverride.stock_unit !== undefined ? itemOverride.stock_unit : (res.stock_unit || 'pcs'),
+          recipe: itemOverride.recipe !== undefined ? itemOverride.recipe : [],
+          availability_status: itemOverride.availability_status !== undefined ? itemOverride.availability_status : (res.is_available ? 'available' : 'out_of_stock')
+        };
+      }
+      return res;
     } finally {
       setLoading(false);
     }
@@ -757,6 +852,18 @@ export const SupabaseProvider = ({ children }) => {
     setLoading(true);
     setError(null);
     try {
+      // Clean up local overrides
+      const localOverrides = JSON.parse(localStorage.getItem('menu_items_local_overrides') || '{}');
+      if (localOverrides[id]) {
+        delete localOverrides[id];
+        localStorage.setItem('menu_items_local_overrides', JSON.stringify(localOverrides));
+      }
+      const stockOverrides = JSON.parse(localStorage.getItem('menu_items_stock_overrides') || '{}');
+      if (stockOverrides[id]) {
+        delete stockOverrides[id];
+        localStorage.setItem('menu_items_stock_overrides', JSON.stringify(stockOverrides));
+      }
+
       const { error: err } = await supabase
         .from('menu_items')
         .delete()

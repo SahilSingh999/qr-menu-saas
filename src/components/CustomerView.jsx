@@ -1091,8 +1091,14 @@ export default function CustomerView() {
       if (cafesList && cafesList.length > 0) {
         let foundCafe = cafesList.find(c => String(c.id) === String(id));
         if (!foundCafe) {
+          const sessionCafeId = localStorage.getItem('admin_session_cafe_id');
+          if (sessionCafeId) {
+            foundCafe = cafesList.find(c => String(c.id) === String(sessionCafeId));
+          }
+        }
+        if (!foundCafe) {
           console.warn(`Cafe with ID ${id} not found. Falling back to first available cafe.`);
-          foundCafe = cafesList[0];
+          foundCafe = cafesList.find(c => c.is_activated !== false) || cafesList[0];
         }
         setCafe(foundCafe);
         if (foundCafe?.currency) {

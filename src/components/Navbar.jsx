@@ -9,6 +9,19 @@ export default function Navbar() {
   const { isDark, toggleTheme } = useTheme();
   const [firstCafeId, setFirstCafeId] = useState('1');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [sessionCafeId, setSessionCafeId] = useState(() => localStorage.getItem('admin_session_cafe_id'));
+
+  useEffect(() => {
+    const handleStorageChange = () => {
+      setSessionCafeId(localStorage.getItem('admin_session_cafe_id'));
+    };
+    window.addEventListener('storage', handleStorageChange);
+    const timer = setInterval(handleStorageChange, 1000);
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      clearInterval(timer);
+    };
+  }, []);
 
   useEffect(() => {
     const loadFirstCafe = async () => {
@@ -72,7 +85,7 @@ export default function Navbar() {
               👨‍🍳 Waiter
             </NavLink>
             <NavLink 
-              to={`/table/4?cafe=${firstCafeId}`} 
+              to={`/table/4?cafe=${sessionCafeId || firstCafeId}`} 
               className={({ isActive }) => `nav-link-item ${isActive ? 'active' : ''}`}
             >
               📱 Customer
