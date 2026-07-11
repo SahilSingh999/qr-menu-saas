@@ -5,7 +5,6 @@ import { PrintBillModal } from './AdminPanel';
 
 export default function WaiterDashboard() {
   const {
-    loading,
     error,
     setError,
     fetchCafes,
@@ -14,8 +13,7 @@ export default function WaiterDashboard() {
     updateOrder,
     subscribeToOrders,
     fetchStaff,
-    fetchMenuItems,
-    updateMenuItem
+    fetchMenuItems
   } = useSupabase();
 
   const { formatPrice, setCurrencyCode } = useCurrency();
@@ -51,6 +49,7 @@ export default function WaiterDashboard() {
     if (selectedCafe?.currency) {
       setCurrencyCode(selectedCafe.currency);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCafe]);
   const [orders, setOrders] = useState([]);
   const [statusFilter, setStatusFilter] = useState('active');
@@ -186,6 +185,7 @@ export default function WaiterDashboard() {
       }
     };
     loadInitialData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Fetch staff list for login selection when branch changes
@@ -202,6 +202,7 @@ export default function WaiterDashboard() {
     } else {
       setLoginStaffList([]);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loginCafeId]);
 
   const handleKeypadPress = (val) => {
@@ -313,6 +314,7 @@ export default function WaiterDashboard() {
       setOrders([]);
       setMenuItems([]);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCafe, isAudioMuted]);
 
   // Periodic chime alarm trigger for active assistance buzzers
@@ -358,6 +360,7 @@ export default function WaiterDashboard() {
         speakLowStockNotification(`Raw Material ${item.name}`, item.stock, item.unit);
       }
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [menuItems, rawIngredients, isAudioMuted]);
 
   const handleUpdateStatus = async (orderId, currentStatus) => {
@@ -888,7 +891,7 @@ export default function WaiterDashboard() {
                                   onClick={() => setFullscreenPhoto({ url, order, index: idx })}
                                 />
                               ));
-                            } catch (e) {
+                            } catch {
                               return <p className="ugc-error">Error loading photos format.</p>;
                             }
                           })()}

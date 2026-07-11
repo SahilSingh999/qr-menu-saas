@@ -64,6 +64,7 @@ export default function AdminPanel() {
   
   // Super Admin & Create Password Visibility States
   const [isSuperAdminSession, setIsSuperAdminSession] = useState(() => localStorage.getItem('is_super_admin_session') === 'true');
+  const [superAdminUsername, setSuperAdminUsername] = useState('');
   const [superAdminPassword, setSuperAdminPassword] = useState('');
   const [loginTab, setLoginTab] = useState('owner'); // 'owner' | 'super'
   const [showCreatePassword, setShowCreatePassword] = useState(false);
@@ -74,7 +75,6 @@ export default function AdminPanel() {
   const [forgotPasswordCafe, setForgotPasswordCafe] = useState(null);
   const [resetUsername, setResetUsername] = useState('');
   const [resetPassword, setResetPassword] = useState('');
-  const [showResetPasswordConfirm, setShowResetPasswordConfirm] = useState(false);
   const [inlineResetPasswordCafeId, setInlineResetPasswordCafeId] = useState(null);
   const [inlineNewPassword, setInlineNewPassword] = useState('');
 
@@ -99,7 +99,24 @@ export default function AdminPanel() {
   const [cafeTableCount, setCafeTableCount] = useState(10);
   const [cafePhone, setCafePhone] = useState('');
   const [cafeFooterMsg, setCafeFooterMsg] = useState('');
+  const [cafeFontFamily, setCafeFontFamily] = useState('Outfit');
+  const [cafeLogoPlacement, setCafeLogoPlacement] = useState('left_header');
   const [qrBaseUrl, setQrBaseUrl] = useState(window.location.origin);
+
+  // Owner settings and branding states
+  const [ownerName, setOwnerName] = useState('');
+  const [ownerLocation, setOwnerLocation] = useState('');
+  const [ownerDescription, setOwnerDescription] = useState('');
+  const [ownerPhone, setOwnerPhone] = useState('');
+  const [ownerFooterMsg, setOwnerFooterMsg] = useState('');
+  const [ownerLogoUrl, setOwnerLogoUrl] = useState('');
+  const [ownerLogoFile, setOwnerLogoFile] = useState(null);
+  const [ownerLogoPreview, setOwnerLogoPreview] = useState('');
+  const [ownerThemeColor, setOwnerThemeColor] = useState('#00f2fe');
+  const [ownerFontFamily, setOwnerFontFamily] = useState('Outfit');
+  const [ownerLogoPlacement, setOwnerLogoPlacement] = useState('left_header');
+  const [ownerCurrency, setOwnerCurrency] = useState('USD');
+  const [ownerTableCount, setOwnerTableCount] = useState(10);
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -116,6 +133,24 @@ export default function AdminPanel() {
   const handleRemoveLogoPreview = () => {
     setLogoFile(null);
     setLogoPreview('');
+  };
+
+  const handleOwnerFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setOwnerLogoFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setOwnerLogoPreview(reader.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleRemoveOwnerLogoPreview = () => {
+    setOwnerLogoFile(null);
+    setOwnerLogoPreview('');
+    setOwnerLogoUrl('');
   };
 
   const handleOnboardFileChange = (e) => {
@@ -384,6 +419,43 @@ export default function AdminPanel() {
     setRawIngredients(prev => prev.filter(item => item.id !== id));
   };
 
+  // Super Admin SaaS-wide helpers
+  const getSaasWideRevenueByCurrency = () => {
+    const totals = {};
+    orders.forEach(order => {
+      if (order.status === 'completed' || order.status === 'bill_approved') {
+        const orderCafe = cafes.find(c => String(c.id) === String(order.cafe_id));
+        const currency = orderCafe?.currency || 'USD';
+        totals[currency] = (totals[currency] || 0) + (Number(order.total_price) || 0);
+      }
+    });
+    
+    if (Object.keys(totals).length === 0) return '—';
+    
+    return Object.entries(totals).map(([currency, total]) => {
+      if (currency === 'INR') return `₹${total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      if (currency === 'NPR') return `Rs. ${total.toLocaleString('en-NP', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      return `$${total.toFixed(2)}`;
+    }).join('  |  ');
+  };
+
+  const getCafeNameForOrder = (orderCafeId) => {
+    const matched = cafes.find(c => String(c.id) === String(orderCafeId));
+    return matched ? matched.name : 'Unknown Cafe';
+  };
+
+  const getCafeCurrencyForOrder = (orderCafeId) => {
+    const matched = cafes.find(c => String(c.id) === String(orderCafeId));
+    return matched ? matched.currency || 'USD' : 'USD';
+  };
+
+  const formatPriceForCafe = (amount, cafeCurrency) => {
+    const num = parseFloat(amount || 0);
+    if (cafeCurrency === 'NPR') return `Rs. ${num.toLocaleString('en-NP', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    if (cafeCurrency === 'INR') return `₹${num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return `$${num.toFixed(2)}`;
+  };
+
   // Fetch initial data (Cafes / Locked Cafe ID)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -399,6 +471,7 @@ export default function AdminPanel() {
       loadLockedCafe();
     }
     loadCafes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Fetch Cafe-specific data (Menu and Orders) and subscribe to realtime orders
@@ -409,6 +482,21 @@ export default function AdminPanel() {
       setDiscountPercentage(selectedCafe.discount_percentage || 0);
       setDiscountPhone(selectedCafe.phone || '');
       setDiscountFooterMsg(selectedCafe.footer_message || '');
+      
+      setOwnerName(selectedCafe.name || '');
+      setOwnerLocation(selectedCafe.location || '');
+      setOwnerDescription(selectedCafe.description || '');
+      setOwnerPhone(selectedCafe.phone || '');
+      setOwnerFooterMsg(selectedCafe.footer_message || '');
+      setOwnerLogoUrl(selectedCafe.logo_url || '');
+      setOwnerLogoPreview(selectedCafe.logo_url || '');
+      setOwnerLogoFile(null);
+      setOwnerThemeColor(selectedCafe.theme_color || '#00f2fe');
+      setOwnerFontFamily(selectedCafe.font_family || 'Outfit');
+      setOwnerLogoPlacement(selectedCafe.logo_placement || 'left_header');
+      setOwnerCurrency(selectedCafe.currency || 'USD');
+      setOwnerTableCount(selectedCafe.table_count || 10);
+      
       loadMenuItems(selectedCafe.id);
       loadOrders(selectedCafe.id);
 
@@ -431,11 +519,35 @@ export default function AdminPanel() {
       return () => {
         if (unsubscribe) unsubscribe();
       };
+    } else if (isSuperAdminSession) {
+      // In Super Admin session: Load ALL orders for platform-wide metrics & logs
+      loadOrders(null);
+
+      // Subscribe to ALL platform orders realtime events
+      const unsubscribe = subscribeToOrders(null, (payload) => {
+        if (payload.eventType === 'INSERT') {
+          setOrders(prev => {
+            if (prev.some(order => String(order.id) === String(payload.new.id))) {
+              return prev;
+            }
+            return [payload.new, ...prev];
+          });
+        } else if (payload.eventType === 'UPDATE') {
+          setOrders(prev => prev.map(order => order.id === payload.new.id ? payload.new : order));
+        } else if (payload.eventType === 'DELETE') {
+          setOrders(prev => prev.filter(order => order.id !== payload.old.id));
+        }
+      });
+
+      return () => {
+        if (unsubscribe) unsubscribe();
+      };
     } else {
       setMenuItems([]);
       setOrders([]);
     }
-  }, [selectedCafe]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCafe, isSuperAdminSession]);
 
   // Data Loading Helpers
   const loadCafes = async () => {
@@ -478,6 +590,7 @@ export default function AdminPanel() {
     if (selectedCafe && activeTab === 'staff') {
       loadStaff(selectedCafe.id);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCafe, activeTab]);
 
   const loadStaff = async (cafeId) => {
@@ -489,7 +602,8 @@ export default function AdminPanel() {
     setAdminAlertMsg('');
 
     if (loginTab === 'super') {
-      if (superAdminPassword === 'superadmin' || superAdminPassword === 'admin123') {
+      const usernameLower = superAdminUsername.trim().toLowerCase();
+      if (usernameLower === 'superadmin' && (superAdminPassword === 'superadmin' || superAdminPassword === 'admin123')) {
         setIsSuperAdminSession(true);
         localStorage.setItem('is_super_admin_session', 'true');
         
@@ -497,13 +611,15 @@ export default function AdminPanel() {
         const allCafes = await fetchCafes();
         if (allCafes) {
           setCafes(allCafes);
-          if (allCafes.length > 0) setSelectedCafe(allCafes[0]);
         }
 
+        setSelectedCafe(null); // Land on SaaS Overview dashboard first
+        setActiveTab('saas_overview');
+        setSuperAdminUsername('');
         setSuperAdminPassword('');
         setAdminAlertMsg('');
       } else {
-        setAdminAlertMsg('❌ Incorrect Super Admin password.');
+        setAdminAlertMsg('❌ Incorrect Super Admin credentials.');
       }
       return;
     }
@@ -649,6 +765,7 @@ export default function AdminPanel() {
     if (selectedCafe?.currency) {
       setCurrencyCode(selectedCafe.currency);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCafe]);
 
   useEffect(() => {
@@ -707,7 +824,9 @@ export default function AdminPanel() {
       table_count: parseInt(cafeTableCount) || 10,
       admin_password: cafeAdminPassword || 'admin123',
       phone: cafePhone,
-      footer_message: cafeFooterMsg
+      footer_message: cafeFooterMsg,
+      font_family: cafeFontFamily,
+      logo_placement: cafeLogoPlacement
     };
 
     const created = await createCafe(newCafe);
@@ -725,6 +844,8 @@ export default function AdminPanel() {
       setCafeAdminPassword('');
       setCafePhone('');
       setCafeFooterMsg('');
+      setCafeFontFamily('Outfit');
+      setCafeLogoPlacement('left_header');
     }
   };
 
@@ -737,6 +858,39 @@ export default function AdminPanel() {
       if (selectedCafe?.id === id) {
         setSelectedCafe(null);
       }
+    }
+  };
+
+  const handleSaveBranding = async (e) => {
+    e.preventDefault();
+    if (!selectedCafe) return;
+
+    let finalLogoUrl = ownerLogoUrl;
+    if (ownerLogoFile) {
+      finalLogoUrl = await uploadImage(ownerLogoFile, 'logos');
+    }
+
+    const updates = {
+      name: ownerName,
+      location: ownerLocation,
+      description: ownerDescription,
+      phone: ownerPhone,
+      footer_message: ownerFooterMsg,
+      logo_url: finalLogoUrl,
+      theme_color: ownerThemeColor,
+      font_family: ownerFontFamily,
+      logo_placement: ownerLogoPlacement,
+      currency: ownerCurrency,
+      table_count: parseInt(ownerTableCount) || 10
+    };
+
+    const updated = await updateCafe(selectedCafe.id, updates);
+    if (updated) {
+      setSelectedCafe(updated);
+      setCafes(prev => prev.map(c => c.id === updated.id ? updated : c));
+      showAdminAlert('🎨 Branding and theme settings updated successfully!');
+    } else {
+      showAdminAlert('❌ Error updating branding settings.');
     }
   };
 
@@ -1472,10 +1626,21 @@ export default function AdminPanel() {
                 <>
                   <h2 style={{ textAlign: 'center', marginBottom: '8px' }}>🛡️ SaaS Super Admin</h2>
                   <p style={{ textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '24px', lineHeight: '1.4' }}>
-                    Enter the master password to provision branches, copy keys, and manage global settings.
+                    Enter master username and password to provision branches, copy keys, and manage global settings.
                   </p>
                   {adminAlertMsg && <div className="alert alert-error" style={{ marginBottom: '16px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', padding: '10px 14px', borderRadius: '10px', fontSize: '0.85rem' }}>{adminAlertMsg}</div>}
                   
+                  <div className="form-group" style={{ marginBottom: '16px' }}>
+                    <label>Super Admin Username</label>
+                    <input 
+                      type="text" 
+                      placeholder="Enter master username" 
+                      value={superAdminUsername} 
+                      onChange={(e) => setSuperAdminUsername(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') handleAdminLogin(); }}
+                    />
+                  </div>
+
                   <div className="form-group" style={{ marginBottom: '24px' }}>
                     <label>Super Admin Password</label>
                     <input 
@@ -1486,7 +1651,7 @@ export default function AdminPanel() {
                       onKeyDown={(e) => { if (e.key === 'Enter') handleAdminLogin(); }}
                     />
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginTop: '6px' }}>
-                      💡 Demo master password: <code>superadmin</code>
+                      💡 Demo credentials: <code>superadmin</code> / <code>admin123</code>
                     </span>
                   </div>
                 </>
@@ -1917,6 +2082,34 @@ export default function AdminPanel() {
                   <p style={{ margin: '4px 0 0 0', fontSize: '1.8rem', fontWeight: 'bold' }}>{cafes.filter(c => !c.is_activated).length}</p>
                 </div>
               </div>
+
+              <div className="stat-card glass-card" style={{ padding: '24px', display: 'flex', gap: '16px', alignItems: 'center' }}>
+                <div style={{ fontSize: '2.5rem', background: 'rgba(124, 58, 237, 0.1)', color: '#7c3aed', width: '60px', height: '60px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>📦</div>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Orders</h4>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '1.8rem', fontWeight: 'bold' }}>{orders.length}</p>
+                </div>
+              </div>
+
+              <div className="stat-card glass-card" style={{ padding: '24px', display: 'flex', gap: '16px', alignItems: 'center' }}>
+                <div style={{ fontSize: '2.5rem', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', width: '60px', height: '60px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>🛎️</div>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Live Requests</h4>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '1.8rem', fontWeight: 'bold' }}>
+                    {orders.filter(o => o.status === 'assistance_needed' || o.status === 'bill_requested').length}
+                  </p>
+                </div>
+              </div>
+
+              <div className="stat-card glass-card" style={{ padding: '24px', display: 'flex', gap: '16px', alignItems: 'center' }}>
+                <div style={{ fontSize: '2.5rem', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', width: '60px', height: '60px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>💰</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <h4 style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Platform Revenue</h4>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '1.05rem', fontWeight: 'bold', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#10b981' }}>
+                    {getSaasWideRevenueByCurrency()}
+                  </p>
+                </div>
+              </div>
             </div>
 
             {/* Pending Key Table */}
@@ -1966,6 +2159,78 @@ export default function AdminPanel() {
                           </td>
                         </tr>
                       ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* SaaS Live Activity Feed */}
+            <div className="form-card glass-card" style={{ width: '100%', maxWidth: 'none' }}>
+              <h2>🔄 Recent Platform Orders</h2>
+              <p className="admin-sub" style={{ marginBottom: '16px' }}>Real-time feed of the latest orders placed across all cafe branches on the platform.</p>
+
+              {orders.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)', border: '1px dashed rgba(255,255,255,0.08)', borderRadius: '12px' }}>
+                  ⏳ No orders placed yet on the platform.
+                </div>
+              ) : (
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.88rem' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                        <th style={{ padding: '12px 8px', color: 'var(--text-muted)' }}>Cafe Branch</th>
+                        <th style={{ padding: '12px 8px', color: 'var(--text-muted)' }}>Table</th>
+                        <th style={{ padding: '12px 8px', color: 'var(--text-muted)' }}>Items</th>
+                        <th style={{ padding: '12px 8px', color: 'var(--text-muted)' }}>Total Amount</th>
+                        <th style={{ padding: '12px 8px', color: 'var(--text-muted)' }}>Status</th>
+                        <th style={{ padding: '12px 8px', color: 'var(--text-muted)' }}>Time</th>
+                        <th style={{ padding: '12px 8px', color: 'var(--text-muted)', textAlign: 'right' }}>Workspace Link</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {orders.slice(0, 5).map(order => {
+                        const cafeName = getCafeNameForOrder(order.cafe_id);
+                        const cafeCurrency = getCafeCurrencyForOrder(order.cafe_id);
+                        const matchedCafe = cafes.find(c => String(c.id) === String(order.cafe_id));
+                        return (
+                          <tr key={order.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                            <td style={{ padding: '12px 8px', fontWeight: 'bold' }}>{cafeName}</td>
+                            <td style={{ padding: '12px 8px' }}>Table {order.table_number || 'N/A'}</td>
+                            <td style={{ padding: '12px 8px', color: 'var(--text-muted)', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {order.items || '—'}
+                            </td>
+                            <td style={{ padding: '12px 8px', fontWeight: '500' }}>
+                              {formatPriceForCafe(order.total_price || 0, cafeCurrency)}
+                            </td>
+                            <td style={{ padding: '12px 8px' }}>
+                              <span className={`status-badge badge-${order.status}`} style={{ fontSize: '0.72rem', padding: '2px 8px', borderRadius: '6px' }}>
+                                {order.status === 'completed' ? 'SERVED ✅' : order.status.replace(/_/g, ' ').toUpperCase()}
+                              </span>
+                            </td>
+                            <td style={{ padding: '12px 8px', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                              {new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </td>
+                            <td style={{ padding: '12px 8px', textAlign: 'right' }}>
+                              {matchedCafe ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedCafe(matchedCafe);
+                                    setActiveTab('orders'); // Jump directly to order view
+                                  }}
+                                  className="btn-select"
+                                  style={{ padding: '4px 10px', fontSize: '0.75rem' }}
+                                >
+                                  Manage Workspace ➔
+                                </button>
+                              ) : (
+                                <span style={{ color: 'var(--text-muted)' }}>—</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -2317,7 +2582,7 @@ export default function AdminPanel() {
                             type="button"
                             className="btn-confirm-yes"
                             onClick={() => setRawItemToDelete(item)}
-                            style={{ padding: '6px 12px', fontSize: '0.75rem', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '6px', cursor: 'pointer' }}
+                            style={{ padding: '6px 12px', fontSize: '0.75rem', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '6px' }}
                           >
                             🗑️ Delete
                           </button>
@@ -2360,17 +2625,17 @@ export default function AdminPanel() {
                 <div className="form-group">
                   <label>Description</label>
                   <textarea 
-                    placeholder="Brief description of the cafe..." 
+                    placeholder="Brief description of the cafe" 
                     value={cafeDescription} 
-                    onChange={(e) => setCafeDescription(e.target.value)}
-                    rows="3"
-                  ></textarea>
+                    onChange={(e) => setCafeDescription(e.target.value)} 
+                    rows="2"
+                  />
                 </div>
                 <div className="form-group">
-                  <label>Contact Phone Number</label>
+                  <label>Contact Phone</label>
                   <input 
                     type="text" 
-                    placeholder="e.g. +977-1-5551234 or +1-555-0199" 
+                    placeholder="e.g. +39 06 123456" 
                     value={cafePhone} 
                     onChange={(e) => setCafePhone(e.target.value)} 
                   />
@@ -2379,25 +2644,14 @@ export default function AdminPanel() {
                   <label>Bill Footer Message</label>
                   <input 
                     type="text" 
-                    placeholder="e.g. Thank You For Dining With Us!" 
+                    placeholder="e.g. Thank you for visiting!" 
                     value={cafeFooterMsg} 
                     onChange={(e) => setCafeFooterMsg(e.target.value)} 
                   />
                 </div>
+
                 <div className="form-group">
-                  <label>Tables Count *</label>
-                  <input 
-                    type="number" 
-                    min="1" 
-                    max="100"
-                    placeholder="Number of tables (e.g. 10)" 
-                    value={cafeTableCount} 
-                    onChange={(e) => setCafeTableCount(parseInt(e.target.value) || 1)}
-                    required 
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Admin Access Password *</label>
+                  <label>Cafe Admin Password *</label>
                   <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                     <input 
                       type={showCreatePassword ? "text" : "password"} 
@@ -2504,11 +2758,198 @@ export default function AdminPanel() {
                     </div>
                   </div>
                 </div>
+                <div className="form-group">
+                  <label>Typography Font Family</label>
+                  <select value={cafeFontFamily} onChange={(e) => setCafeFontFamily(e.target.value)}>
+                    <option value="Outfit">Outfit (Clean Sans-Serif)</option>
+                    <option value="Playfair Display">Playfair Display (Elegant Serif)</option>
+                    <option value="JetBrains Mono">JetBrains Mono (Modern Monospace)</option>
+                    <option value="Quicksand">Quicksand (Friendly Rounded)</option>
+                    <option value="Comfortaa">Comfortaa (Playful Cursive)</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label>Brand Logo Placement</label>
+                  <select value={cafeLogoPlacement} onChange={(e) => setCafeLogoPlacement(e.target.value)}>
+                    <option value="left_header">Left Header (Standard inline logo)</option>
+                    <option value="center_header">Center Header (Centered layout)</option>
+                    <option value="top_banner">Top Banner (Landscape cover photo)</option>
+                    <option value="hidden">Hidden (Text-only header)</option>
+                  </select>
+                </div>
+
                 <button type="submit" className="btn-primary" disabled={loading}>
                   {loading ? 'Creating...' : '✨ Create Cafe'}
                 </button>
               </form>
             </div>
+            )}
+
+            {!isSuperAdminSession && selectedCafe && (
+              <div className="form-card glass-card">
+                <h2>🎨 Branding & Theme Settings</h2>
+                <p className="admin-sub">Customize accent colors, typography, brand logo placement, and branch information for <strong>{selectedCafe.name}</strong>.</p>
+                
+                <form onSubmit={handleSaveBranding}>
+                  <div className="form-group">
+                    <label>Cafe Name *</label>
+                    <input 
+                      type="text" 
+                      value={ownerName} 
+                      onChange={(e) => setOwnerName(e.target.value)}
+                      required 
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label>Location / City</label>
+                    <input 
+                      type="text" 
+                      value={ownerLocation} 
+                      onChange={(e) => setOwnerLocation(e.target.value)} 
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label>Description</label>
+                    <textarea 
+                      value={ownerDescription} 
+                      onChange={(e) => setOwnerDescription(e.target.value)} 
+                      rows="2"
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label>Contact Phone</label>
+                    <input 
+                      type="text" 
+                      value={ownerPhone} 
+                      onChange={(e) => setOwnerPhone(e.target.value)} 
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label>Bill Footer Message</label>
+                    <input 
+                      type="text" 
+                      value={ownerFooterMsg} 
+                      onChange={(e) => setOwnerFooterMsg(e.target.value)} 
+                      placeholder="e.g. Thanks for dining with us! Come back soon!"
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label>Cafe Currency</label>
+                    <select value={ownerCurrency} onChange={(e) => setOwnerCurrency(e.target.value)}>
+                      <option value="USD">USD ($)</option>
+                      <option value="INR">INR (₹)</option>
+                      <option value="NPR">NPR (Rs.)</option>
+                    </select>
+                  </div>
+
+                  <div className="form-group">
+                    <label>Total Tables Count</label>
+                    <input 
+                      type="number" 
+                      min="1" 
+                      max="100"
+                      value={ownerTableCount} 
+                      onChange={(e) => setOwnerTableCount(e.target.value)} 
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label>Cafe Logo Image</label>
+                    <div className="file-upload-wrapper">
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        onChange={handleOwnerFileChange}
+                        id="ownerLogoFile"
+                        style={{ display: 'none' }}
+                      />
+                      <label htmlFor="ownerLogoFile" className="btn-select file-upload-btn">
+                        📂 Choose New Logo File
+                      </label>
+                      {ownerLogoPreview ? (
+                        <div className="logo-preview-container">
+                          <img src={ownerLogoPreview} alt="Logo preview" className="logo-preview-img" />
+                          <button type="button" className="remove-preview-btn" onClick={handleRemoveOwnerLogoPreview}>×</button>
+                        </div>
+                      ) : (
+                        <span className="file-name-label">No logo set (will use default template logo)</span>
+                      )}
+                    </div>
+                    <div className="or-divider-text">OR paste external URL:</div>
+                    <input 
+                      type="url" 
+                      placeholder="https://images.unsplash.com/..." 
+                      value={ownerLogoUrl} 
+                      onChange={(e) => setOwnerLogoUrl(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label>Accent Theme Color</label>
+                    <div className="color-presets-wrapper">
+                      <div className="color-presets">
+                        {[
+                          { name: 'Cyan', value: '#00f2fe' },
+                          { name: 'Violet', value: '#7c3aed' },
+                          { name: 'Emerald', value: '#10b981' },
+                          { name: 'Ruby', value: '#ef4444' },
+                          { name: 'Gold', value: '#f59e0b' }
+                        ].map(color => (
+                          <button
+                            key={color.value}
+                            type="button"
+                            className={`color-preset-btn ${ownerThemeColor === color.value ? 'active' : ''}`}
+                            style={{ backgroundColor: color.value }}
+                            onClick={() => setOwnerThemeColor(color.value)}
+                            title={color.name}
+                          />
+                        ))}
+                      </div>
+                      <div className="custom-color-row">
+                        <span className="color-label">Or Custom:</span>
+                        <input 
+                          type="color" 
+                          value={ownerThemeColor}
+                          onChange={(e) => setOwnerThemeColor(e.target.value)}
+                          className="custom-color-picker"
+                        />
+                        <span className="color-value-text">{ownerThemeColor}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label>Typography Font Family</label>
+                    <select value={ownerFontFamily} onChange={(e) => setOwnerFontFamily(e.target.value)}>
+                      <option value="Outfit">Outfit (Clean Sans-Serif)</option>
+                      <option value="Playfair Display">Playfair Display (Elegant Serif)</option>
+                      <option value="JetBrains Mono">JetBrains Mono (Modern Monospace)</option>
+                      <option value="Quicksand">Quicksand (Friendly Rounded)</option>
+                      <option value="Comfortaa">Comfortaa (Playful Cursive)</option>
+                    </select>
+                  </div>
+
+                  <div className="form-group">
+                    <label>Brand Logo Placement</label>
+                    <select value={ownerLogoPlacement} onChange={(e) => setOwnerLogoPlacement(e.target.value)}>
+                      <option value="left_header">Left Header (Standard inline logo)</option>
+                      <option value="center_header">Center Header (Centered layout)</option>
+                      <option value="top_banner">Top Banner (Landscape cover photo)</option>
+                      <option value="hidden">Hidden (Text-only header)</option>
+                    </select>
+                  </div>
+
+                  <button type="submit" className="btn-primary" disabled={loading}>
+                    {loading ? 'Saving...' : '💾 Save Settings'}
+                  </button>
+                </form>
+              </div>
             )}
 
             <div className="list-card glass-card" style={adminSession ? { gridColumn: '1 / -1', maxWidth: 'none', width: '100%' } : {}}>
@@ -3559,7 +4000,7 @@ export function PrintBillModal({ order, cafe, menuItems, formatPrice, onClose, o
   
   // Parse items
   const parsedItems = [];
-  const regex = /(\d+)x\s+([^,\n\(\[)]+)(?:\s*\(([^)]+)\))?/g;
+  const regex = /(\d+)x\s+([^,\n([)]+)(?:\s*\(([^)]+)\))?/g;
   let match;
   const itemsText = order.items || '';
   let foundAny = false;

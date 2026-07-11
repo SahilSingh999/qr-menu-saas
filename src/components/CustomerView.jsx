@@ -152,6 +152,7 @@ const SnakeGame = ({ themeColor }) => {
       clearInterval(gameLoopInterval);
       window.removeEventListener('keydown', handleKeyDown);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameOver, highScore, themeColor]);
 
   return (
@@ -212,6 +213,7 @@ const MemoryMatch = ({ themeColor }) => {
 
   useEffect(() => {
     initGame();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleCardClick = (idx) => {
@@ -388,6 +390,7 @@ const TowerBuilder = ({ themeColor }) => {
 
   useEffect(() => {
     initGame();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -528,6 +531,7 @@ const TowerBuilder = ({ themeColor }) => {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameOver]);
 
   return (
@@ -665,7 +669,7 @@ const FamilyMode = ({ cafeName, tableId, cafeId }) => {
                 if (Array.isArray(parsed)) {
                   photos.push(...parsed);
                 }
-              } catch (e) {}
+              } catch {}
             }
           });
           setGalleryPhotos(photos);
@@ -673,6 +677,7 @@ const FamilyMode = ({ cafeName, tableId, cafeId }) => {
       }
     };
     loadGallery();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cafeId]);
 
   useEffect(() => {
@@ -685,6 +690,7 @@ const FamilyMode = ({ cafeName, tableId, cafeId }) => {
       clearInterval(timer);
       clearInterval(quoteTimer);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -770,7 +776,7 @@ const VoucherUnlockScreen = ({ order, themeColor, onClear }) => {
       if (Array.isArray(parsed) && parsed.length > 0) {
         isUgcUploaded = true;
       }
-    } catch (e) {}
+    } catch {}
   }
 
   const isDiscountRevoked = order?.items && order.items.includes('[❌ Discount Revoked/Not Applied]');
@@ -1002,6 +1008,7 @@ export default function CustomerView() {
   // Fetch Cafe Details
   useEffect(() => {
     loadCafeDetails(cafeId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cafeId]);
 
   // Load order tracking state from localstorage if exists
@@ -1040,6 +1047,7 @@ export default function CustomerView() {
         supabase.removeChannel(channel);
       };
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [placedOrder]);
 
   // Subscribe to BroadcastChannel for mock realtime updates when offline/fallback
@@ -1082,6 +1090,7 @@ export default function CustomerView() {
     }, 10000);
 
     return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [placedOrder, cafeId, tableId]);
 
   const loadCafeDetails = async (id) => {
@@ -1182,9 +1191,7 @@ export default function CustomerView() {
     return cart.reduce((total, cartItem) => total + (cartItem.item.price * cartItem.quantity), 0);
   };
 
-  const getCartCount = () => {
-    return cart.reduce((total, cartItem) => total + cartItem.quantity, 0);
-  };
+
 
   const deductIngredientsForOrderItem = (menuItem, quantity) => {
     if (!menuItem.recipe || !Array.isArray(menuItem.recipe)) return;
@@ -1281,7 +1288,7 @@ export default function CustomerView() {
         setIsVerifyingOrder(false);
         setError('Checkout failed. Please verify connection and try again.');
       }
-    } catch (err) {
+    } catch {
       clearInterval(stepsTimer);
       setIsVerifyingOrder(false);
       setError('An error occurred during order confirmation.');
@@ -1491,7 +1498,10 @@ export default function CustomerView() {
     <div
       className={`customer-container ${cart.length > 0 ? 'has-cart' : ''}`}
       data-cv-theme={customerTheme}
-      style={{ '--customer-accent': cafe?.theme_color || '#00f2fe' }}
+      style={{
+        '--customer-accent': cafe?.theme_color || '#00f2fe',
+        '--customer-font-family': cafe?.font_family || 'Outfit'
+      }}
     >
 
       {/* Toast Notification (iOS-safe, replaces alert) */}
@@ -1675,14 +1685,27 @@ export default function CustomerView() {
 
       {/* ── HERO HEADER ── */}
       <div className="cv-hero glass-card">
-        {/* Top Part: Cafe Brand & Theme Toggle */}
-        <div className="cv-hero-top-row">
-          <div className="cv-brand-left">
+        {/* Top Banner layout if selected */}
+        {cafe?.logo_placement === 'top_banner' && (
+          <div className="cv-hero-banner-image-wrapper">
             <img
               src={cafe?.logo_url || 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=150&auto=format&fit=crop&q=60'}
               alt={cafe?.name || 'Restaurant'}
-              className="cv-brand-logo"
+              className="cv-hero-banner-logo"
             />
+          </div>
+        )}
+
+        {/* Top Part: Cafe Brand & Theme Toggle */}
+        <div className="cv-hero-top-row">
+          <div className={`cv-brand-left ${cafe?.logo_placement === 'center_header' ? 'cv-brand-layout-center' : ''}`}>
+            {cafe?.logo_placement !== 'hidden' && cafe?.logo_placement !== 'top_banner' && (
+              <img
+                src={cafe?.logo_url || 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=150&auto=format&fit=crop&q=60'}
+                alt={cafe?.name || 'Restaurant'}
+                className="cv-brand-logo"
+              />
+            )}
             <div className="cv-brand-copy">
               <h1 className="cv-cafe-name">{cafe?.name || 'Restaurant'}</h1>
               {cafe?.location && <p className="cv-cafe-branch">📍 {cafe.location}</p>}
@@ -1731,7 +1754,7 @@ export default function CustomerView() {
 
           {/* 5-step progress bar */}
           <div className="tracker-progress-bar-container">
-            {STATUS_STEPS.map((step, idx) => {
+            {STATUS_STEPS.map((step) => {
               const filled = step.statuses.includes(orderTracking.status);
               return (
                 <div key={step.key} className={`progress-segment step-${step.key} ${filled ? 'filled' : ''}`}>

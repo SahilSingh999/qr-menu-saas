@@ -1,3 +1,4 @@
+/* eslint-disable react/only-export-components */
 import React, { createContext, useContext, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
@@ -113,7 +114,7 @@ export const SupabaseProvider = ({ children }) => {
               activationKey = candidateKey;
               isUnique = true;
             }
-          } catch (e) {
+          } catch {
             // Fallback: If offline or table missing, check localStorage mock data list
             const mockList = getMockData('cafes');
             const exists = mockList.some(c => c.activation_key === candidateKey);
@@ -141,7 +142,7 @@ export const SupabaseProvider = ({ children }) => {
       };
 
       // Separate unsupported database columns to prevent database-level insert crashes
-      const { admin_username, footer_message, ...supabaseItem } = updatedCafePayload;
+      const { admin_username, footer_message, font_family, logo_placement, ...supabaseItem } = updatedCafePayload;
 
       const { data, error: err } = await supabase
         .from('cafes')
@@ -165,12 +166,14 @@ export const SupabaseProvider = ({ children }) => {
 
       if (createdCafe) {
         // Save unsupported schema variables as overrides
-        if (admin_username !== undefined || footer_message !== undefined) {
+        if (admin_username !== undefined || footer_message !== undefined || font_family !== undefined || logo_placement !== undefined) {
           const overrides = JSON.parse(localStorage.getItem('cafes_saas_overrides') || '{}');
           overrides[createdCafe.id] = {
             ...overrides[createdCafe.id],
             ...(admin_username !== undefined ? { admin_username } : {}),
-            ...(footer_message !== undefined ? { footer_message } : {})
+            ...(footer_message !== undefined ? { footer_message } : {}),
+            ...(font_family !== undefined ? { font_family } : {}),
+            ...(logo_placement !== undefined ? { logo_placement } : {})
           };
           localStorage.setItem('cafes_saas_overrides', JSON.stringify(overrides));
         }
@@ -195,15 +198,17 @@ export const SupabaseProvider = ({ children }) => {
   const updateCafe = async (id, updates) => {
     setLoading(true);
     setError(null);
-    const { admin_username, footer_message, ...supabaseUpdates } = updates;
+    const { admin_username, footer_message, font_family, logo_placement, ...supabaseUpdates } = updates;
 
     // Save unsupported schema variables as overrides immediately
-    if (admin_username !== undefined || footer_message !== undefined) {
+    if (admin_username !== undefined || footer_message !== undefined || font_family !== undefined || logo_placement !== undefined) {
       const overrides = JSON.parse(localStorage.getItem('cafes_saas_overrides') || '{}');
       overrides[id] = {
         ...overrides[id],
         ...(admin_username !== undefined ? { admin_username } : {}),
-        ...(footer_message !== undefined ? { footer_message } : {})
+        ...(footer_message !== undefined ? { footer_message } : {}),
+        ...(font_family !== undefined ? { font_family } : {}),
+        ...(logo_placement !== undefined ? { logo_placement } : {})
       };
       localStorage.setItem('cafes_saas_overrides', JSON.stringify(overrides));
     }
@@ -434,7 +439,7 @@ export const SupabaseProvider = ({ children }) => {
       };
 
       return { success: true, cafe };
-    } catch (err) {
+    } catch {
       // Fallback for mock data (LocalStorage mode)
       const mockList = getMockData('cafes');
       let target = mockList.find(c => c.activation_key === key);
@@ -493,7 +498,7 @@ export const SupabaseProvider = ({ children }) => {
       };
 
       return { success: true, cafe };
-    } catch (err) {
+    } catch {
       // Fallback for mock data (LocalStorage mode)
       const mockList = getMockData('cafes');
       let target = mockList.find(c => c.activation_key === key);
@@ -565,7 +570,7 @@ export const SupabaseProvider = ({ children }) => {
         };
       }
       return cafe;
-    } catch (err) {
+    } catch {
       // Fallback for mock data (LocalStorage mode)
       const mockList = getMockData('cafes');
       let cafe = mockList.find(c => String(c.id) === String(id)) || null;
@@ -1124,7 +1129,7 @@ export const SupabaseProvider = ({ children }) => {
           }
         )
         .subscribe();
-    } catch (e) {
+    } catch {
       console.warn("Supabase Realtime not available. Using local BroadcastChannel instead.");
     }
 
@@ -1250,7 +1255,7 @@ export const SupabaseProvider = ({ children }) => {
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
       const filePath = `${fileName}`;
 
-      const { data, error: uploadErr } = await supabase.storage
+      const { error: uploadErr } = await supabase.storage
         .from(bucket)
         .upload(filePath, fileToUpload);
 

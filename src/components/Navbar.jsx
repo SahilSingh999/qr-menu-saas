@@ -36,6 +36,7 @@ export default function Navbar() {
       }
     };
     loadFirstCafe();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Close mobile menu on route change

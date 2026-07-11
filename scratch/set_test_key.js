@@ -37,7 +37,7 @@ async function run() {
     // If name didn't match, update any first cafe row
     const { data: firstCafe, error: fetchErr } = await supabase.from('cafes').select('id').limit(1);
     if (!fetchErr && firstCafe.length > 0) {
-      const { data: updated, error: updateErr } = await supabase
+      const { data: updated } = await supabase
         .from('cafes')
         .update({ 
           activation_key: 'ACT-TEST-KEY', 
