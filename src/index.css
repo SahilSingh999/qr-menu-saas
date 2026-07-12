@@ -5504,6 +5504,7 @@ footer code {
   transition: var(--transition);
   position: relative;
   height: 100%;
+  overflow: hidden;
 }
 
 .menu-item-row:hover {
@@ -5528,6 +5529,7 @@ footer code {
   flex: 1;
   width: 100%;
   min-width: 0;
+  overflow: hidden;
 }
 
 .menu-item-header {
@@ -5542,6 +5544,10 @@ footer code {
   font-weight: 800;
   color: var(--text-heading);
   margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: break-word;
+  min-width: 0;
 }
 
 .menu-item-price {
@@ -5556,6 +5562,9 @@ footer code {
   color: var(--text-muted);
   line-height: 1.4;
   margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: break-word;
 }
 
 .portion-badge-preview {
@@ -6018,10 +6027,19 @@ footer code {
 
 .cv-horizontal-scroller::-webkit-scrollbar { display: none; }
 
+/* Popular card — fixed width so multiple peek on mobile */
 .cv-popular-card {
-  flex-shrink: 0; width: 160px; border-radius: 16px;
-  background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
-  overflow: hidden; display: flex; flex-direction: column; transition: all 0.25s ease;
+  flex-shrink: 0;
+  width: 72vw;
+  max-width: 200px;
+  min-width: 150px;
+  border-radius: 16px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: all 0.25s ease;
 }
 
 .cv-popular-card:hover {
@@ -6054,24 +6072,59 @@ footer code {
 
 .cv-all-items-section { margin-bottom: 24px; }
 
-.cv-items-list { display: flex; flex-direction: column; gap: 12px; }
-
-.cv-item-card {
-  display: flex; gap: 14px; padding: 14px; border-radius: 16px;
-  background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.07);
-  transition: all 0.25s ease; align-items: flex-start;
+/* All-items list — always a vertical stack of horizontal row cards */
+.cv-items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
-.cv-item-card:hover { border-color: rgba(var(--customer-accent-rgb),0.25); background: rgba(255,255,255,0.06); }
+/* Item card — horizontal row: image left, info right */
+.cv-item-card {
+  display: flex;
+  flex-direction: row;
+  gap: 14px;
+  padding: 14px;
+  border-radius: 16px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.07);
+  transition: all 0.25s ease;
+  align-items: flex-start;
+  box-sizing: border-box;
+  width: 100%;
+}
 
-.cv-item-img { width: 80px; height: 80px; object-fit: cover; border-radius: 12px; flex-shrink: 0; border: 1px solid rgba(255,255,255,0.06); }
+.cv-item-card:hover {
+  border-color: rgba(var(--customer-accent-rgb),0.25);
+  background: rgba(255,255,255,0.06);
+}
+
+/* Square thumbnail — fixed 80×80 */
+.cv-item-img {
+  width: 80px;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 12px;
+  flex-shrink: 0;
+  border: 1px solid rgba(255,255,255,0.06);
+}
 
 .cv-item-img-placeholder {
-  width: 80px; height: 80px; border-radius: 12px;
-  background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06);
-  display: flex; align-items: center; justify-content: center; font-size: 2rem; flex-shrink: 0;
+  width: 80px;
+  height: 80px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  flex-shrink: 0;
 }
 
+/* Info area — fills remaining horizontal space */
 .cv-item-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
 .cv-item-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
 .cv-item-name-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
@@ -6090,6 +6143,48 @@ footer code {
   padding: 5px 8px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.12);
   background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.8);
   font-family: var(--font-sans); font-size: 0.75rem; cursor: pointer; flex: 1; min-width: 80px;
+}
+
+.cv-portions-container {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.cv-portion-pill {
+  padding: 4px 10px;
+  border-radius: 50px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: rgba(255,255,255,0.04);
+  color: rgba(255,255,255,0.6);
+  border: 1px solid rgba(255,255,255,0.08);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.cv-portion-pill.static {
+  cursor: default;
+  background: rgba(255,255,255,0.05);
+  color: rgba(255,255,255,0.7);
+  border-color: rgba(255,255,255,0.1);
+}
+
+.cv-portion-pill.active {
+  background: rgba(var(--customer-accent-rgb), 0.15);
+  color: var(--customer-accent);
+  border-color: rgba(var(--customer-accent-rgb), 0.3);
+}
+
+.cv-portion-pill:not(.static):hover {
+  background: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.9);
+  border-color: rgba(255,255,255,0.15);
+}
+
+.cv-portion-pill.active:hover {
+  background: rgba(var(--customer-accent-rgb), 0.22);
 }
 
 .cv-add-btn {
@@ -6256,27 +6351,10 @@ footer code {
 }
 .cv-mobile-cart-close:hover { transform: scale(1.1); }
 
+/* Older desktop layout overrides — kept for sidebar visibility only */
 @media (min-width: 768px) {
-  .cv-content-area {
-    padding-bottom: 40px; max-width: 1280px; margin: 0 auto;
-    display: grid; grid-template-columns: 1fr 340px;
-    column-gap: 20px; padding: 0 24px 40px; align-items: start;
-    width: 100%; box-sizing: border-box;
-  }
-
-  .cv-hero, .alert, .order-tracker-panel {
-    max-width: 1280px; margin-left: auto; margin-right: auto;
-    width: calc(100% - 48px);
-  }
-
   .cv-menu-section { margin: 0; }
-  .cv-cart-sidebar { display: block; }
   .cv-mobile-cart-bar, .cv-sticky-cart-bar { display: none; }
-}
-
-@media (min-width: 1024px) {
-  .cv-content-area { grid-template-columns: 1fr 360px; padding: 0 32px 48px; }
-  .cv-hero, .alert, .order-tracker-panel { width: calc(100% - 64px); }
 }
 
 /* ============================================================
@@ -6452,6 +6530,30 @@ body[data-cv-theme="light"] .customer-page-root {
   color: rgba(0,0,0,0.8);
 }
 
+[data-cv-theme="light"] .cv-portion-pill {
+  background: rgba(0,0,0,0.04);
+  color: rgba(0,0,0,0.6);
+  border-color: rgba(0,0,0,0.08);
+}
+
+[data-cv-theme="light"] .cv-portion-pill.static {
+  background: rgba(0,0,0,0.05);
+  color: rgba(0,0,0,0.7);
+  border-color: rgba(0,0,0,0.12);
+}
+
+[data-cv-theme="light"] .cv-portion-pill.active {
+  background: rgba(var(--customer-accent-rgb), 0.12);
+  color: var(--customer-accent);
+  border-color: rgba(var(--customer-accent-rgb), 0.3);
+}
+
+[data-cv-theme="light"] .cv-portion-pill:not(.static):hover {
+  background: rgba(0,0,0,0.08);
+  color: rgba(0,0,0,0.85);
+  border-color: rgba(0,0,0,0.18);
+}
+
 [data-cv-theme="light"] .cv-table-badge {
   background: rgba(var(--customer-accent-rgb), 0.1);
 }
@@ -6587,22 +6689,24 @@ body[data-cv-theme="light"] .customer-page-root {
   font-weight: 900;
 }
 
-/* ── DESKTOP overrides — 2-col layout, no negative space ─────── */
+/* ── DESKTOP overrides — unified responsive layout ─────────── */
 @media (min-width: 768px) {
 
   .customer-container {
     padding-bottom: 0 !important;
-    /* Keep grid from previous block — override below */
     display: block !important;
     max-width: 1400px;
     margin: 0 auto;
     padding: 20px 24px 40px !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
   }
 
   /* Hero full-width at top */
   .cv-hero {
     margin: 0 0 16px !important;
     width: 100%;
+    box-sizing: border-box;
   }
 
   .order-tracker-panel {
@@ -6610,20 +6714,26 @@ body[data-cv-theme="light"] .customer-page-root {
     width: 100%;
   }
 
-  /* Content area: menu (2/3) + sidebar (1/3) */
+  /* Content area: menu column + sidebar column */
   .cv-content-area {
     display: grid;
-    grid-template-columns: 1fr 320px;
-    column-gap: 20px;
+    grid-template-columns: 1fr 300px;
+    column-gap: 16px;
     align-items: start;
     padding-bottom: 0;
+    width: 100%;
+    box-sizing: border-box;
+    min-width: 0;
   }
 
-  /* Menu section fills left column */
+  /* Menu section fills left column — never overflow */
   .cv-menu-section {
     grid-column: 1 / 2;
     grid-row: 1;
     margin: 0;
+    min-width: 0;
+    width: 100%;
+    box-sizing: border-box;
   }
 
   /* Desktop sidebar shown in right column */
@@ -6636,22 +6746,37 @@ body[data-cv-theme="light"] .customer-page-root {
     max-height: calc(100vh - 40px);
     overflow-y: auto;
     margin: 0;
+    min-width: 0;
+    width: 100%;
+    box-sizing: border-box;
   }
 
   /* Hide mobile inline cart and sticky bar on desktop */
   .cv-inline-cart { display: none !important; }
   .cv-sticky-pay-bar { display: none !important; }
 
-  /* Menu items — 2-column grid on desktop */
+  /* Items list — single column flex (no grid), always horizontal row cards */
   .cv-items-list {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 12px !important;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
   }
 
-  /* Popular cards slightly wider on desktop */
-  .cv-popular-card { width: 180px; }
+  /* Ensure card stays horizontal row on desktop too */
+  .cv-item-card {
+    flex-direction: row !important;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
+  /* Popular cards at fixed wider width on desktop */
+  .cv-popular-card { width: 180px !important; max-width: none; }
 }
+
 
 @media (min-width: 1024px) {
   .customer-container {
@@ -6659,13 +6784,17 @@ body[data-cv-theme="light"] .customer-page-root {
   }
 
   .cv-content-area {
-    grid-template-columns: 1fr 360px;
-    column-gap: 24px;
+    grid-template-columns: 1fr 340px;
+    column-gap: 20px;
   }
 
-  /* 3-column items grid on large desktop */
-  .cv-items-list {
-    grid-template-columns: 1fr 1fr 1fr;
+  .cv-cart-sidebar { max-width: 340px; }
+}
+
+@media (min-width: 1200px) {
+  .cv-content-area {
+    grid-template-columns: 1fr 360px;
+    column-gap: 24px;
   }
 
   .cv-cart-sidebar { max-width: 360px; }
@@ -6675,7 +6804,7 @@ body[data-cv-theme="light"] .customer-page-root {
   .customer-container { max-width: 1440px; }
 }
 
-/* ── Keep mobile sidebar hidden ─────────────────────────────── */
+/* ── Keep mobile sidebar + inline cart hidden on desktop ─────── */
 @media (max-width: 767px) {
   .cv-cart-sidebar { display: none !important; }
 }
@@ -6760,7 +6889,7 @@ body[data-cv-theme="light"] .customer-page-root {
    MOBILE RESPONSIVENESS & PADDING QC RESET (Bulletproof overrides)
    ============================================================ */
 @media (max-width: 767px) {
-  html, body, #root, .customer-container {
+  html, body, #root {
     width: 100% !important;
     max-width: 100% !important;
     overflow-x: hidden !important;
@@ -6769,32 +6898,62 @@ body[data-cv-theme="light"] .customer-page-root {
     box-sizing: border-box !important;
   }
 
+  .customer-container {
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: hidden !important;
+    margin: 0 !important;
+    padding: 12px 12px 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  .cv-content-area {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: hidden !important;
+    box-sizing: border-box !important;
+  }
+
   .cv-hero {
-    margin: 12px 12px 0 !important;
-    width: calc(100% - 24px) !important;
+    margin: 0 0 12px !important;
+    width: 100% !important;
     box-sizing: border-box !important;
   }
 
   .cv-menu-section {
-    margin: 12px 12px 0 !important;
-    width: calc(100% - 24px) !important;
+    margin: 0 !important;
+    width: 100% !important;
     box-sizing: border-box !important;
+    overflow-x: hidden !important;
   }
 
-  .cv-item-card, .cv-popular-card, .cv-inline-cart, .order-tracker-panel {
+  .cv-item-card, .cv-inline-cart, .order-tracker-panel {
     box-sizing: border-box !important;
     max-width: 100% !important;
+    width: 100% !important;
   }
 
+  /* Enforce horizontal row card layout on mobile — image left, info right */
+  .cv-item-card {
+    flex-direction: row !important;
+    align-items: flex-start !important;
+  }
+
+  /* Keep popular card at fixed peek width — do NOT force 100% */
+  .cv-popular-card {
+    width: 72vw !important;
+    max-width: 200px !important;
+    min-width: 140px !important;
+  }
+
+  /* Items list — single vertical column on mobile */
   .cv-items-list {
     width: 100% !important;
     display: flex !important;
     flex-direction: column !important;
-    gap: 12px !important;
-  }
-
-  .cv-item-card {
-    width: 100% !important;
+    gap: 10px !important;
+    box-sizing: border-box !important;
   }
 
   .waiting-mode-fullscreen-container, 
@@ -7876,4 +8035,221 @@ body[data-cv-theme="light"] .customer-page-root {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+/* ============================================================
+   DYNAMIC TABLE MERGING STYLES (Feature 12 - Extended)
+   ============================================================ */
+
+/* Customer view group active banner */
+.cv-group-banner {
+  background: linear-gradient(135deg, rgba(0, 242, 254, 0.15), rgba(79, 172, 254, 0.15));
+  border: 1px solid rgba(0, 242, 254, 0.3);
+  border-radius: 12px;
+  padding: 12px 16px;
+  margin: 15px 24px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.88rem;
+  color: var(--cv-text-primary);
+  box-shadow: 0 4px 20px rgba(0, 242, 254, 0.05);
+}
+
+.cv-group-banner strong {
+  color: var(--customer-accent, #00f2fe);
+}
+
+@media (max-width: 767px) {
+  .cv-group-banner {
+    margin: 12px 16px;
+    font-size: 0.8rem;
+  }
+}
+
+/* Waiter view inline group badge and button */
+.waiter-order-group-badge {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+.unmerge-btn-inline {
+  background: rgba(239, 68, 68, 0.1) !important;
+  color: #ef4444 !important;
+  border: none !important;
+  border-radius: 4px !important;
+  padding: 2.5px 6px !important;
+  font-size: 0.75rem !important;
+  font-weight: bold !important;
+  cursor: pointer !important;
+  margin-left: 4px !important;
+  transition: all 0.2s ease !important;
+}
+
+:root .unmerge-btn-inline {
+  background: rgba(220, 38, 38, 0.1) !important;
+  color: #dc2626 !important;
+}
+
+.unmerge-btn-inline:hover {
+  background: rgba(239, 68, 68, 0.25) !important;
+  transform: scale(1.05) !important;
+}
+
+/* Light theme overrides for waiter buttons */
+:root .btn-chime-toggle {
+  color: var(--text-main) !important;
+  background: var(--bg-tertiary) !important;
+  border: 1px solid var(--glass-border) !important;
+}
+:root .btn-chime-toggle.active {
+  background: var(--bg-tertiary) !important;
+  color: var(--text-main) !important;
+}
+:root .btn-chime-toggle:hover {
+  background: var(--bg-primary) !important;
+}
+
+[data-theme="dark"] .btn-chime-toggle {
+  color: white !important;
+  background: rgba(255, 255, 255, 0.03) !important;
+}
+[data-theme="dark"] .btn-chime-toggle.active {
+  color: white !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
+/* Dynamic Merge Tables button styles */
+.btn-merge-tables {
+  background: var(--accent-cyan) !important;
+  color: white !important;
+  border: none !important;
+  padding: 0.5rem 1rem !important;
+  border-radius: 8px !important;
+  font-family: var(--font-sans) !important;
+  font-size: 0.85rem !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  transition: var(--transition) !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+}
+
+[data-theme="dark"] .btn-merge-tables {
+  background: var(--accent-cyan) !important;
+  color: #0a0e1a !important; /* dark text on bright neon cyan for contrast */
+}
+
+.btn-merge-tables:hover {
+  filter: brightness(0.9) !important;
+}
+
+/* Table merging selection grid styles inside modal */
+.table-merge-grid-container {
+  max-height: 200px !important;
+  overflow-y: auto !important;
+  display: grid !important;
+  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)) !important;
+  gap: 8px !important;
+  padding: 8px !important;
+  border: 1px solid var(--glass-border) !important;
+  border-radius: 8px !important;
+}
+
+.table-merge-grid-container::-webkit-scrollbar {
+  width: 6px !important;
+}
+
+.table-merge-grid-container::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02) !important;
+  border-radius: 4px !important;
+}
+
+.table-merge-grid-container::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-radius: 4px !important;
+}
+
+.table-merge-grid-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2) !important;
+}
+
+/* Modal layout style */
+.table-merge-modal-content {
+  width: 90% !important;
+  max-width: 550px !important;
+  padding: 24px !important;
+  border-radius: 16px !important;
+  background: var(--bg-secondary) !important;
+  color: var(--text-main) !important;
+  border: 1px solid var(--glass-border) !important;
+  box-shadow: 0 15px 50px rgba(0, 0, 0, 0.3) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 16px !important;
+  align-items: flex-start !important;
+}
+
+.table-merge-modal-content select,
+.table-merge-modal-content input[type="text"] {
+  width: 100% !important;
+  padding: 10px 12px !important;
+  border-radius: 8px !important;
+  border: 1px solid var(--glass-border) !important;
+  background: var(--input-bg) !important;
+  color: var(--text-main) !important;
+  font-family: var(--font-sans) !important;
+  font-size: 0.9rem !important;
+}
+
+.table-merge-modal-content select option {
+  background: var(--bg-secondary) !important;
+  color: var(--text-main) !important;
+}
+
+.table-merge-btn-grid {
+  padding: 10px 4px !important;
+  border-radius: 8px !important;
+  cursor: pointer !important;
+  font-weight: 600 !important;
+  transition: all 0.2s ease !important;
+}
+
+.table-merge-btn-grid:hover {
+  filter: brightness(0.9) !important;
+}
+
+/* Dynamic Responsive Enhancements */
+@media (max-width: 576px) {
+  .table-merge-modal-content {
+    padding: 16px !important;
+    border-radius: 12px !important;
+    gap: 12px !important;
+  }
+  
+  .table-merge-grid-container {
+    grid-template-columns: repeat(auto-fill, minmax(65px, 1fr)) !important;
+    gap: 6px !important;
+    padding: 6px !important;
+  }
+
+  .table-merge-btn-grid {
+    padding: 8px 2px !important;
+    font-size: 0.8rem !important;
+  }
+
+  .waiter-card-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 8px !important;
+  }
+  
+  .waiter-card-header .header-meta {
+    margin-left: 0 !important;
+    width: 100% !important;
+    display: flex !important;
+    justify-content: space-between !important;
+  }
 }

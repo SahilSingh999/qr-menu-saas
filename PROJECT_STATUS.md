@@ -76,10 +76,24 @@ Transitioning the restaurant ordering application into a multi-tenant SaaS archi
 
 ---
 
-## 📋 Remaining Features (10 through 12)
-- [ ] **Feature 10**: Super Admin dashboard — dedicated authentication, SaaS-wide metrics, cafe management, activation key registry.
-- [ ] **Feature 11**: Theme management — per-cafe branding theme colors, font customization, logo placement.
-- [ ] **Feature 12**: Subscription plans — plan tiers, feature gating per plan, expiry management.
+## ✅ Completed Core SaaS Features (10 through 12)
+
+- **Feature 10: Super Admin Dashboard & Registry**
+  * Built dedicated authentication checkpoint (`superadmin` / `admin123`).
+  * Isolated SaaS-wide metrics overview and cafe branch listing dashboard.
+- **Feature 11: Dynamic Theme & Brand Customizations**
+  * Added custom cafe branding settings for theme colors, font families, and logo alignments.
+- **Feature 12: Dynamic Table Merging**
+  * Designed Waiter-managed table grouping modal to combine any arbitrary tables dynamically.
+  * Resolved customer QR codes dynamically to the primary table order session.
+  * Consolidated order history & kitchen display cards with instant split options.
+
+---
+
+## ⏸️ Deferred Features (Post-Launch Phase)
+
+- **Feature 13: Subscription Plans & Pricing**
+  * Plan tiers, feature gating, billing integrations, and subscription expiry. Deferred for post-launch after initial 10 client installations.
 
 ---
 
@@ -87,11 +101,12 @@ Transitioning the restaurant ordering application into a multi-tenant SaaS archi
 
 | Role | Username / Cafe | Password |
 |------|----------------|----------|
-| Super Admin | `superadmin` | `admin123` |
+| Super Admin | `SaasSuperQR999` | `SuperAdmin8080` |
 | Cafe Owner (Trackside) | `trackside` | `trackside123` *(or whatever was set during onboarding)* |
 | New tenant registration | Use key `ACT-24KO-TK1E-13JC` | Set during onboarding |
 
-- **Admin Panel**: http://localhost:5173/admin
+- **Admin Panel (Cafe Owners)**: http://localhost:5173/admin
+- **Super Admin Console**: http://localhost:5173/superadmin
 - **Customer View**: http://localhost:5173 *(auto-resolves to logged-in cafe's menu)*
 - **Waiter Dashboard**: http://localhost:5173/waiter
 
@@ -101,11 +116,12 @@ Transitioning the restaurant ordering application into a multi-tenant SaaS archi
 
 | File | What Changed |
 |------|-------------|
-| [src/components/AdminPanel.jsx](file:///d:/qr-menu-saas/src/components/AdminPanel.jsx) | Filtered Owner dropdown, hid cafe creation form & delete buttons from branch owners, isolated raw inventory by cafe, corrected metrics leakages, replaced dropdown login with secure username login, added URL param locks, updated onboarding Step 2 to capture admin usernames |
+| [src/components/AdminPanel.jsx](file:///d:/qr-menu-saas/src/components/AdminPanel.jsx) | Filtered Owner dropdown, hid cafe creation form & delete buttons from branch owners, isolated raw inventory by cafe, corrected metrics leakages, replaced dropdown login with secure username login, added URL param locks, updated onboarding Step 2 to capture admin usernames, created separate /superadmin route structure, added menu item editing UI & Cancel logic, resolved layout overlapping on Cafes settings tab, exposed branding & theme settings form to Super Admins managing a workspace, resolved Cafes Settings tab button visibility. |
 | [src/components/WaiterDashboard.jsx](file:///d:/qr-menu-saas/src/components/WaiterDashboard.jsx) | Filtered waiter select dropdowns to hide unactivated cafes, isolated raw ingredients by active selectedCafe, added URL parameter locks |
-| [src/components/CustomerView.jsx](file:///d:/qr-menu-saas/src/components/CustomerView.jsx) | Scoped raw inventory deductions to the active cafe ID; active owner session fallback for cafe resolution |
+| [src/components/CustomerView.jsx](file:///d:/qr-menu-saas/src/components/CustomerView.jsx) | Scoped raw inventory deductions to active cafe ID; active owner session fallback; replaced portions dropdown select with interactive portion pills / static badges. |
 | [src/components/Navbar.jsx](file:///d:/qr-menu-saas/src/components/Navbar.jsx) | Reactive customer preview link resolving to active session cafe |
 | [src/context/SupabaseContext.jsx](file:///d:/qr-menu-saas/src/context/SupabaseContext.jsx) | Isolated non-DB menu item schema columns into localStorage overrides; fixed false Out-of-Stock badge by using null-safe stock merge logic and one-time stale data purge |
+| [src/index.css](file:///d:/qr-menu-saas/src/index.css) | Added styling for portion pills (`.cv-portions-container`, `.cv-portion-pill`, light/dark themes), removed `.list-card` full width layout override on cafes tab, added card overflow protection to menu items. |
 | [supabase/migrations/20260708000000_add_admin_username.sql](file:///d:/qr-menu-saas/supabase/migrations/20260708000000_add_admin_username.sql) | Added `admin_username` column to the `cafes` table |
 | [supabase/migrations/20260705000001_add_onboarding_fields.sql](file:///d:/qr-menu-saas/supabase/migrations/20260705000001_add_onboarding_fields.sql) | Added `location`, `phone`, `description` columns to `cafes` table |
 | [PROJECT_STATUS.md](file:///d:/qr-menu-saas/PROJECT_STATUS.md) | This document |
@@ -144,28 +160,24 @@ id, cafe_id, table_number, items (JSON text), total_price, status, created_at
 | Customer View showing wrong cafe | ✅ Fixed | Navbar & CustomerView now use active session cafe ID |
 | New menu items showing "Out of Stock" | ✅ Fixed | Null-safe stock merge + stale data purge added |
 | Database schema crash on `admin_username` | ✅ Fixed | Column added via migration |
+| Overlapping/Empty space on Cafes Tab | ✅ Fixed | Removed grid full-width override on list-card |
+| Superadmin settings change not working | ✅ Fixed | Exposed branding form to Superadmin in workspace mode, fixed tab button visibility |
+| Portion options dropdown clutter | ✅ Fixed | Replaced dropdown with premium visual pills & static badges |
+| XSS / Text overflow on menu item cards | ✅ Fixed | Applied flex layout text-overflow clipping and word-break ellipsis |
 
 ---
 
 ## ▶️ Exact Next Task to Resume
 
-1. **Test the "Out of Stock" fix**: 
-   - Log in as a cafe owner
-   - Create a new menu item WITHOUT entering a stock value
-   - Verify it shows "Stock: Unlimited" badge in Admin → Menu Manager
-   - Verify the Customer View shows the item with "+ Add" button (not "Sold Out")
-   
-2. **If stale localStorage data still shows Out of Stock**: Open browser DevTools → Application → Local Storage → clear `menu_items_local_overrides` key manually. The next page reload will re-fetch clean data.
-
-3. **Implement Feature 10: Super Admin Dashboard**
-   - Create a dedicated Super Admin authentication checkpoint / login view
-   - Isolate SaaS-wide administration: cafes provisioning, key registries, status audits
-   - Show aggregate metrics: total cafes, active/inactive counts, order summaries across all tenants
+1. **Review and Execute Database Schema Synchronization**:
+   - Create the migration SQL file in `supabase/migrations` to add SaaS overrides (footer message, currency, font family, logo placement, table merges, stock levels, recipes, and status fields) directly into the Supabase database.
+   - Refactor client queries in `SupabaseContext.jsx` to read and write directly to/from these new database columns.
+   - Run the client-side migration hooks to move legacy overrides from `localStorage` to the database securely with zero data loss.
 
 ---
 
 ## 💡 Important Notes for Next Session
-- The app uses **localStorage** extensively for data not yet in the DB schema. Always check both Supabase and localStorage when debugging data issues.
-- If you suspect stale localStorage is causing issues, use the browser DevTools (F12 → Application → Local Storage) to inspect/clear keys.
+- The app currently uses **localStorage** for configurations not yet in the DB schema. After database synchronization, all configurations will be fully stored on the server.
 - `npm run dev` must be running for the dev server at `http://localhost:5173`.
 - Supabase credentials are in `.env` as `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
+

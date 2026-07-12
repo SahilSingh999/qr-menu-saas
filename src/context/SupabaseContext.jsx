@@ -74,10 +74,16 @@ export const SupabaseProvider = ({ children }) => {
 
       // Merge local overrides (admin_username, footer_message)
       const overrides = JSON.parse(localStorage.getItem('cafes_saas_overrides') || '{}');
-      return rawCafes.map(cafe => ({
-        ...cafe,
-        ...(overrides[cafe.id] || {})
-      }));
+      return rawCafes.map(cafe => {
+        const merged = {
+          ...cafe,
+          ...(overrides[cafe.id] || {})
+        };
+        if (!merged.table_merges) {
+          merged.table_merges = [];
+        }
+        return merged;
+      });
     } catch (err) {
       setError(err.message);
       console.error('Error fetching cafes:', err);
@@ -142,7 +148,7 @@ export const SupabaseProvider = ({ children }) => {
       };
 
       // Separate unsupported database columns to prevent database-level insert crashes
-      const { admin_username, footer_message, font_family, logo_placement, ...supabaseItem } = updatedCafePayload;
+      const { admin_username, footer_message, font_family, logo_placement, table_merges, ...supabaseItem } = updatedCafePayload;
 
       const { data, error: err } = await supabase
         .from('cafes')
@@ -166,14 +172,15 @@ export const SupabaseProvider = ({ children }) => {
 
       if (createdCafe) {
         // Save unsupported schema variables as overrides
-        if (admin_username !== undefined || footer_message !== undefined || font_family !== undefined || logo_placement !== undefined) {
+        if (admin_username !== undefined || footer_message !== undefined || font_family !== undefined || logo_placement !== undefined || table_merges !== undefined) {
           const overrides = JSON.parse(localStorage.getItem('cafes_saas_overrides') || '{}');
           overrides[createdCafe.id] = {
             ...overrides[createdCafe.id],
             ...(admin_username !== undefined ? { admin_username } : {}),
             ...(footer_message !== undefined ? { footer_message } : {}),
             ...(font_family !== undefined ? { font_family } : {}),
-            ...(logo_placement !== undefined ? { logo_placement } : {})
+            ...(logo_placement !== undefined ? { logo_placement } : {}),
+            ...(table_merges !== undefined ? { table_merges } : {})
           };
           localStorage.setItem('cafes_saas_overrides', JSON.stringify(overrides));
         }
@@ -184,6 +191,9 @@ export const SupabaseProvider = ({ children }) => {
           ...createdCafe,
           ...(overrides[createdCafe.id] || {})
         };
+        if (!createdCafe.table_merges) {
+          createdCafe.table_merges = [];
+        }
       }
       return createdCafe;
     } catch (err) {
@@ -198,17 +208,18 @@ export const SupabaseProvider = ({ children }) => {
   const updateCafe = async (id, updates) => {
     setLoading(true);
     setError(null);
-    const { admin_username, footer_message, font_family, logo_placement, ...supabaseUpdates } = updates;
+    const { admin_username, footer_message, font_family, logo_placement, table_merges, ...supabaseUpdates } = updates;
 
     // Save unsupported schema variables as overrides immediately
-    if (admin_username !== undefined || footer_message !== undefined || font_family !== undefined || logo_placement !== undefined) {
+    if (admin_username !== undefined || footer_message !== undefined || font_family !== undefined || logo_placement !== undefined || table_merges !== undefined) {
       const overrides = JSON.parse(localStorage.getItem('cafes_saas_overrides') || '{}');
       overrides[id] = {
         ...overrides[id],
         ...(admin_username !== undefined ? { admin_username } : {}),
         ...(footer_message !== undefined ? { footer_message } : {}),
         ...(font_family !== undefined ? { font_family } : {}),
-        ...(logo_placement !== undefined ? { logo_placement } : {})
+        ...(logo_placement !== undefined ? { logo_placement } : {}),
+        ...(table_merges !== undefined ? { table_merges } : {})
       };
       localStorage.setItem('cafes_saas_overrides', JSON.stringify(overrides));
     }
@@ -568,6 +579,9 @@ export const SupabaseProvider = ({ children }) => {
           ...cafe,
           ...(overrides[cafe.id] || {})
         };
+        if (!cafe.table_merges) {
+          cafe.table_merges = [];
+        }
       }
       return cafe;
     } catch {

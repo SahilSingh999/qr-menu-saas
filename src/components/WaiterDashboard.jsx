@@ -11,6 +11,7 @@ export default function WaiterDashboard() {
     fetchOrders,
     updateOrderStatus,
     updateOrder,
+    updateCafe,
     subscribeToOrders,
     fetchStaff,
     fetchMenuItems
@@ -57,6 +58,12 @@ export default function WaiterDashboard() {
   const [fullscreenPhoto, setFullscreenPhoto] = useState(null);
   const [confirmCancelId, setConfirmCancelId] = useState(null);
   const [toast, setToast] = useState(null);
+
+  // Merge Tables States
+  const [showMergeModal, setShowMergeModal] = useState(false);
+  const [mergePrimaryTable, setMergePrimaryTable] = useState('');
+  const [mergeChildrenTables, setMergeChildrenTables] = useState([]);
+  const [mergeSearchQuery, setMergeSearchQuery] = useState('');
 
   // Waiter session & login states
   const [waiterSession, setWaiterSession] = useState(() => {
@@ -448,6 +455,48 @@ export default function WaiterDashboard() {
     }
   };
 
+  const handleMergeTables = async (primaryId, childrenIds) => {
+    if (!selectedCafe) return;
+    const currentMerges = selectedCafe.table_merges || [];
+    // Remove any previous merges containing these tables to avoid duplicates/circular merges
+    const filteredMerges = currentMerges.filter(m => {
+      if (m.primary === parseInt(primaryId)) return false;
+      if (childrenIds.includes(m.primary)) return false;
+      m.children = m.children.filter(c => c !== parseInt(primaryId) && !childrenIds.includes(c));
+      return m.children.length > 0;
+    });
+
+    const newMerge = {
+      primary: parseInt(primaryId),
+      children: childrenIds.map(id => parseInt(id))
+    };
+
+    const updatedTableMerges = [...filteredMerges, newMerge];
+    const updated = await updateCafe(selectedCafe.id, { table_merges: updatedTableMerges });
+    if (updated) {
+      setSelectedCafe(updated);
+      setCafes(prev => prev.map(c => c.id === updated.id ? updated : c));
+      showToast(`🔗 Merged tables successfully under Table ${primaryId}!`, 'success');
+    } else {
+      showToast('❌ Failed to merge tables. Please try again.', 'error');
+    }
+  };
+
+  const handleUnmergeTables = async (primaryId) => {
+    if (!selectedCafe) return;
+    const currentMerges = selectedCafe.table_merges || [];
+    const updatedTableMerges = currentMerges.filter(m => m.primary !== parseInt(primaryId));
+
+    const updated = await updateCafe(selectedCafe.id, { table_merges: updatedTableMerges });
+    if (updated) {
+      setSelectedCafe(updated);
+      setCafes(prev => prev.map(c => c.id === updated.id ? updated : c));
+      showToast(`⚠️ Table ${primaryId} group unmerged successfully.`, 'success');
+    } else {
+      showToast('❌ Failed to unmerge tables.', 'error');
+    }
+  };
+
   const handleDownloadPhoto = async (photoObj) => {
     if (!photoObj || !photoObj.url) return;
     const { url, order, index } = photoObj;
@@ -663,6 +712,20 @@ export default function WaiterDashboard() {
             {isAudioMuted ? '🔇 Audio Chimes: Muted' : '🔊 Audio Chimes: Active'}
           </button>
 
+          {/* Merge Tables Control Button */}
+          <button
+            type="button"
+            className="btn-merge-tables"
+            onClick={() => {
+              setMergePrimaryTable('');
+              setMergeChildrenTables([]);
+              setMergeSearchQuery('');
+              setShowMergeModal(true);
+            }}
+          >
+            🔗 Merge Tables
+          </button>
+
           {/* Cafe Selector - hidden or replaced with staff info when logged in */}
           {waiterSession ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -834,12 +897,47 @@ export default function WaiterDashboard() {
             <div className="waiter-orders-grid">
               {filteredOrders.map(order => (
                 <div key={order.id} className={`waiter-order-card card-status-${order.status} glass-card`}>
-                  <div className="waiter-card-header">
+                  <div className="waiter-card-header" style={{ flexWrap: 'wrap', gap: '10px' }}>
                     <div className={`table-badge ${['pending', 'assistance_needed'].includes(order.status) ? 'flash-table-banner' : ''}`}>
                       <span>Table</span>
                       <h3>{order.table_number}</h3>
                     </div>
-                    <div className="header-meta">
+
+                    {(() => {
+                      const mergeGroup = selectedCafe?.table_merges?.find(
+                        m => String(m.primary) === String(order.table_number)
+                      );
+                      if (mergeGroup) {
+                        return (
+                          <div className="waiter-order-group-badge animated-fade-in" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', background: 'rgba(0, 242, 254, 0.1)', color: 'var(--accent-cyan)', padding: '4px 8px', borderRadius: '6px', border: '1px solid rgba(0, 242, 254, 0.2)' }}>
+                            <span>🔗 Group ({mergeGroup.primary}, {mergeGroup.children.join(', ')})</span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleUnmergeTables(mergeGroup.primary);
+                              }}
+                              style={{
+                                background: 'rgba(239, 68, 68, 0.1)',
+                                color: '#ef4444',
+                                border: 'none',
+                                borderRadius: '4px',
+                                padding: '2px 6px',
+                                fontSize: '0.75rem',
+                                fontWeight: 'bold',
+                                cursor: 'pointer',
+                                marginLeft: '4px'
+                              }}
+                            >
+                              Split
+                            </button>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
+
+                    <div className="header-meta" style={{ marginLeft: 'auto' }}>
                       <span className="order-id">#Order {order.id.toString().slice(-4)}</span>
                       <span className="order-time-stamp">
                         ⏰ {new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -1080,6 +1178,98 @@ export default function WaiterDashboard() {
           onApproveDiscount={handleApproveBillWithDetails}
           isWaiter={true}
         />
+      )}
+
+      {/* Dynamic Table Merging Modal */}
+      {showMergeModal && selectedCafe && (
+        <div className="fullscreen-photo-overlay glass-blur animated-fade-in" style={{ zIndex: 1000 }} onClick={() => setShowMergeModal(false)}>
+          <div className="fullscreen-photo-modal table-merge-modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', borderBottom: '1px solid var(--glass-border)', paddingBottom: '12px' }}>
+              <h3 style={{ margin: 0, fontSize: '1.25rem', color: 'var(--text-heading)' }}>🔗 Dynamic Table Merging</h3>
+              <button type="button" style={{ border: 'none', background: 'transparent', fontSize: '1.5rem', cursor: 'pointer', color: 'var(--text-muted)' }} onClick={() => setShowMergeModal(false)}>×</button>
+            </div>
+
+            <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
+              <label style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>1. Select Primary Billing Table:</label>
+              <select 
+                value={mergePrimaryTable} 
+                onChange={(e) => {
+                  setMergePrimaryTable(e.target.value);
+                  setMergeChildrenTables([]);
+                }}
+              >
+                <option value="">-- Choose Table --</option>
+                {Array.from({ length: selectedCafe.table_count || 10 }, (_, i) => i + 1).map(num => (
+                  <option key={num} value={num}>Table {num}</option>
+                ))}
+              </select>
+            </div>
+
+            {mergePrimaryTable && (
+              <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
+                <label style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>2. Select Tables to Combine:</label>
+                
+                <input 
+                  type="text" 
+                  placeholder="🔍 Search table number..." 
+                  value={mergeSearchQuery}
+                  onChange={(e) => setMergeSearchQuery(e.target.value)}
+                />
+
+                <div className="table-merge-grid-container">
+                  {Array.from({ length: selectedCafe.table_count || 10 }, (_, i) => i + 1)
+                    .filter(num => String(num) !== String(mergePrimaryTable))
+                    .filter(num => !mergeSearchQuery || String(num).includes(mergeSearchQuery))
+                    .map(num => {
+                      const isSelected = mergeChildrenTables.includes(num);
+                      return (
+                        <button
+                          key={num}
+                          type="button"
+                          className="table-merge-btn-grid"
+                          onClick={() => {
+                            setMergeChildrenTables(prev => 
+                              prev.includes(num) ? prev.filter(n => n !== num) : [...prev, num]
+                            );
+                          }}
+                          style={{
+                            border: isSelected ? '1px solid var(--accent-cyan)' : '1px solid var(--glass-border)',
+                            background: isSelected ? 'rgba(0, 242, 254, 0.15)' : 'var(--input-bg)',
+                            color: isSelected ? 'var(--accent-cyan)' : 'var(--text-main)',
+                          }}
+                        >
+                          T-{num}
+                        </button>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', width: '100%', marginTop: '10px', borderTop: '1px solid var(--glass-border)', paddingTop: '15px' }}>
+              <button 
+                type="button" 
+                className="btn-select" 
+                onClick={() => setShowMergeModal(false)}
+                style={{ cursor: 'pointer', padding: '8px 16px', borderRadius: '8px', border: '1px solid var(--glass-border)', background: 'transparent', color: 'var(--text-main)', fontWeight: '600' }}
+              >
+                Cancel
+              </button>
+              <button 
+                type="button" 
+                className="btn-primary" 
+                disabled={!mergePrimaryTable || mergeChildrenTables.length === 0}
+                onClick={() => {
+                  handleMergeTables(mergePrimaryTable, mergeChildrenTables);
+                  setShowMergeModal(false);
+                }}
+                style={{ cursor: 'pointer', padding: '8px 16px', borderRadius: '8px', border: 'none', background: 'var(--accent-cyan)', color: 'white', fontWeight: '600' }}
+              >
+                Merge Tables
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

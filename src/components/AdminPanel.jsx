@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useSupabase } from '../context/SupabaseContext';
 import { useCurrency } from '../context/CurrencyContext';
 
-export default function AdminPanel() {
+export default function AdminPanel({ mode = 'owner' }) {
   const {
     loading,
     error,
@@ -66,7 +66,7 @@ export default function AdminPanel() {
   const [isSuperAdminSession, setIsSuperAdminSession] = useState(() => localStorage.getItem('is_super_admin_session') === 'true');
   const [superAdminUsername, setSuperAdminUsername] = useState('');
   const [superAdminPassword, setSuperAdminPassword] = useState('');
-  const [loginTab, setLoginTab] = useState('owner'); // 'owner' | 'super'
+  const [loginTab, _setLoginTab] = useState(mode === 'superadmin' ? 'super' : 'owner'); // 'owner' | 'super'
   const [showCreatePassword, setShowCreatePassword] = useState(false);
 
   // Password Recovery States
@@ -288,6 +288,7 @@ export default function AdminPanel() {
   };
 
   // Confirm / alert state (iOS-safe, no browser dialogs)
+  const [editingMenuItem, setEditingMenuItem] = useState(null);
   const [deleteCafeConfirmId, setDeleteCafeConfirmId] = useState(null);
   const [deleteItemConfirmId, setDeleteItemConfirmId] = useState(null);
   const [cancelOrderConfirmId, setCancelOrderConfirmId] = useState(null);
@@ -474,6 +475,12 @@ export default function AdminPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Sync login tab state when mode changes
+  useEffect(() => {
+    _setLoginTab(mode === 'superadmin' ? 'super' : 'owner');
+  }, [mode]);
+
+
   // Fetch Cafe-specific data (Menu and Orders) and subscribe to realtime orders
   useEffect(() => {
     if (selectedCafe) {
@@ -603,7 +610,7 @@ export default function AdminPanel() {
 
     if (loginTab === 'super') {
       const usernameLower = superAdminUsername.trim().toLowerCase();
-      if (usernameLower === 'superadmin' && (superAdminPassword === 'superadmin' || superAdminPassword === 'admin123')) {
+      if (usernameLower === 'saassuperqr999' && superAdminPassword === 'SuperAdmin8080') {
         setIsSuperAdminSession(true);
         localStorage.setItem('is_super_admin_session', 'true');
         
@@ -895,16 +902,62 @@ export default function AdminPanel() {
   };
 
   // CRUD Handler - Menu Item
+  const resetMenuItemForm = () => {
+    setEditingMenuItem(null);
+    setItemName('');
+    setItemCategory('Main');
+    setItemPrice('');
+    setItemDescription('');
+    setItemAvailable(true);
+    setItemIsVeg(true);
+    setPortionsList([]);
+    setPortionInput('');
+    setItemFile(null);
+    setItemPreview('');
+    setItemStock('');
+    setItemLowStockThreshold('');
+    setItemStockUnit('pcs');
+    setRecipeList([]);
+    setSelectedRecipeIngId('');
+    setRecipeQtyInput('');
+  };
+
+  const handleStartEditMenuItem = (item) => {
+    setEditingMenuItem(item);
+    setItemName(item.name || '');
+    setItemCategory(item.category || 'Main');
+    setItemPrice(item.price !== undefined ? String(item.price) : '');
+    setItemDescription(item.description || '');
+    setItemAvailable(item.is_available !== false);
+    setItemIsVeg(item.is_veg !== false);
+    setPortionsList(item.portion_options || []);
+    setItemPreview(item.image_url || '');
+    setItemFile(null);
+    setItemStock(item.stock !== undefined && item.stock !== null ? String(item.stock) : '');
+    setItemLowStockThreshold(item.low_stock_threshold !== undefined && item.low_stock_threshold !== null ? String(item.low_stock_threshold) : '');
+    setItemStockUnit(item.stock_unit || 'pcs');
+    setRecipeList(item.recipe || []);
+    setSelectedRecipeIngId('');
+    setRecipeQtyInput('');
+
+    // Smooth scroll the Add/Edit form card into view
+    const formCard = document.querySelector('.form-card');
+    if (formCard) {
+      formCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
+  // CRUD Handler - Menu Item (Create / Edit)
   const handleCreateMenuItem = async (e) => {
     e.preventDefault();
     if (!itemName.trim() || !itemPrice.trim()) return;
 
-    let finalImageUrl = '';
+    let finalImageUrl = itemPreview; // Keep existing image URL if not replacing
     if (itemFile) {
       finalImageUrl = await uploadImage(itemFile, 'menu_items');
     }
 
-    const newItem = {
+    const itemPayload = {
       cafe_id: (menuTargetCafe || selectedCafe).id,
       name: itemName,
       category: itemCategory,
@@ -920,25 +973,25 @@ export default function AdminPanel() {
       recipe: recipeList
     };
 
-    const created = await createMenuItem(newItem);
-    if (created) {
-      setMenuItems(prev => [...prev, created]);
-      setItemName('');
-      setItemCategory('Main');
-      setItemPrice('');
-      setItemDescription('');
-      setItemAvailable(true);
-      setItemIsVeg(true);
-      setPortionsList([]);
-      setPortionInput('');
-      setItemFile(null);
-      setItemPreview('');
-      setItemStock('');
-      setItemLowStockThreshold('');
-      setItemStockUnit('pcs');
-      setRecipeList([]);
-      setSelectedRecipeIngId('');
-      setRecipeQtyInput('');
+    if (editingMenuItem) {
+      const updated = await updateMenuItem(editingMenuItem.id, itemPayload);
+      if (updated) {
+        setMenuItems(prev => prev.map(m => m.id === editingMenuItem.id ? updated : m));
+        showAdminAlert('🎉 Menu item updated successfully!');
+        resetMenuItemForm();
+      } else {
+        // Fallback for mock/local states
+        setMenuItems(prev => prev.map(m => m.id === editingMenuItem.id ? { ...m, ...itemPayload, id: editingMenuItem.id } : m));
+        showAdminAlert('🎉 Menu item updated!');
+        resetMenuItemForm();
+      }
+    } else {
+      const created = await createMenuItem(itemPayload);
+      if (created) {
+        setMenuItems(prev => [...prev, created]);
+        showAdminAlert('🎉 Menu item created successfully!');
+        resetMenuItemForm();
+      }
     }
   };
 
@@ -1580,45 +1633,39 @@ export default function AdminPanel() {
             </>
           ) : (
             <>
-              {/* Tab Selector */}
-              {!isCafeLocked && (
-                <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '12px' }}>
-                  <button
-                    type="button"
-                    onClick={() => { setLoginTab('owner'); setAdminAlertMsg(''); }}
-                    style={{
-                      flex: 1,
-                      padding: '8px 12px',
-                      borderRadius: '8px',
-                      border: 'none',
-                      cursor: 'pointer',
-                      fontSize: '0.85rem',
-                      fontWeight: 600,
-                      background: loginTab === 'owner' ? 'var(--accent-purple)' : 'transparent',
-                      color: loginTab === 'owner' ? '#fff' : 'var(--text-muted)',
-                      transition: 'all 0.2s'
-                    }}
-                  >
-                    🏢 Cafe Owner
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setLoginTab('super'); setAdminAlertMsg(''); }}
-                    style={{
-                      flex: 1,
-                      padding: '8px 12px',
-                      borderRadius: '8px',
-                      border: 'none',
-                      cursor: 'pointer',
-                      fontSize: '0.85rem',
-                      fontWeight: 600,
-                      background: loginTab === 'super' ? 'var(--accent-cyan)' : 'transparent',
-                      color: loginTab === 'super' ? '#fff' : 'var(--text-muted)',
-                      transition: 'all 0.2s'
-                    }}
-                  >
-                    🛡️ Super Admin
-                  </button>
+              {/* Tab Selector — only shown when NEITHER mode forces a single view */}
+              {!isCafeLocked && mode === 'owner' && (
+                // /admin route: show ONLY the Cafe Owner tab (no Super Admin tab exposed)
+                <div style={{ marginBottom: '24px', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '12px' }}>
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    fontSize: '0.88rem',
+                    fontWeight: 700,
+                    color: 'var(--accent-purple)'
+                  }}>
+                    <span>🏢</span>
+                    <span>Cafe Owner Access</span>
+                  </div>
+                </div>
+              )}
+              {!isCafeLocked && mode === 'superadmin' && (
+                // /superadmin route: show ONLY the Super Admin label (no Cafe Owner tab)
+                <div style={{ marginBottom: '24px', borderBottom: '1px solid rgba(0,242,254,0.15)', paddingBottom: '12px' }}>
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    fontSize: '0.88rem',
+                    fontWeight: 700,
+                    color: 'var(--accent-cyan)'
+                  }}>
+                    <span>🛡️</span>
+                    <span>SaaS Super Admin Console</span>
+                  </div>
                 </div>
               )}
 
@@ -1650,9 +1697,6 @@ export default function AdminPanel() {
                       onChange={(e) => setSuperAdminPassword(e.target.value)}
                       onKeyDown={(e) => { if (e.key === 'Enter') handleAdminLogin(); }}
                     />
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginTop: '6px' }}>
-                      💡 Demo credentials: <code>superadmin</code> / <code>admin123</code>
-                    </span>
                   </div>
                 </>
               ) : (
@@ -1766,29 +1810,32 @@ export default function AdminPanel() {
                 onClick={handleAdminLogin}
                 style={{ width: '100%', marginBottom: '16px' }}
               >
-                Access Panel
+                {mode === 'superadmin' ? '🛡️ Enter Super Admin Console' : 'Access Panel'}
               </button>
 
-              <div style={{ textAlign: 'center', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '16px' }}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowActivation(true);
-                    setAdminAlertMsg('');
-                  }}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--accent-cyan)',
-                    cursor: 'pointer',
-                    fontSize: '0.85rem',
-                    fontWeight: 500,
-                    textDecoration: 'underline'
-                  }}
-                >
-                  🔑 Activate Cafe Branch
-                </button>
-              </div>
+              {/* Activate branch link — only relevant for cafe owners, not super admin */}
+              {mode === 'owner' && (
+                <div style={{ textAlign: 'center', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '16px' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowActivation(true);
+                      setAdminAlertMsg('');
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--accent-cyan)',
+                      cursor: 'pointer',
+                      fontSize: '0.85rem',
+                      fontWeight: 500,
+                      textDecoration: 'underline'
+                    }}
+                  >
+                    🔑 Activate Cafe Branch
+                  </button>
+                </div>
+              )}
             </>
           )}
         </div>
@@ -2004,14 +2051,12 @@ export default function AdminPanel() {
             </>
           ) : (
             <>
-              {!isSuperAdminSession && (
-                <button 
+              <button 
                   className={`tab-btn ${activeTab === 'cafes' ? 'active' : ''}`}
                   onClick={() => setActiveTab('cafes')}
                 >
-                  🏠 Cafe Branch
+                  {isSuperAdminSession ? '🏠 Cafe Settings' : '🏠 Cafe Branch'}
                 </button>
-              )}
               <button 
                 className={`tab-btn ${activeTab === 'staff' ? 'active' : ''}`}
                 onClick={() => setActiveTab('staff')}
@@ -2599,7 +2644,7 @@ export default function AdminPanel() {
         {/* CAFES TAB */}
         {activeTab === 'cafes' && (
           <div className="pane-layout">
-            {isSuperAdminSession && (
+            {isSuperAdminSession && !selectedCafe && (
               <div className="form-card glass-card">
                 <h2>Create New Cafe</h2>
               <form onSubmit={handleCreateCafe}>
@@ -2786,7 +2831,7 @@ export default function AdminPanel() {
             </div>
             )}
 
-            {!isSuperAdminSession && selectedCafe && (
+            {selectedCafe && (
               <div className="form-card glass-card">
                 <h2>🎨 Branding & Theme Settings</h2>
                 <p className="admin-sub">Customize accent colors, typography, brand logo placement, and branch information for <strong>{selectedCafe.name}</strong>.</p>
@@ -2952,7 +2997,7 @@ export default function AdminPanel() {
               </div>
             )}
 
-            <div className="list-card glass-card" style={adminSession ? { gridColumn: '1 / -1', maxWidth: 'none', width: '100%' } : {}}>
+            <div className="list-card glass-card">
               <h2>Cafes Directory</h2>
               {displayedCafes.length === 0 ? (
                 <div className="empty-state">
@@ -3197,7 +3242,7 @@ export default function AdminPanel() {
 
                 {/* Add Menu Item */}
                 <div className="form-card glass-card">
-                  <h2>Add Menu Item</h2>
+                  <h2>{editingMenuItem ? `✏️ Edit Menu Item: ${editingMenuItem.name}` : '✨ Add Menu Item'}</h2>
                   <form onSubmit={handleCreateMenuItem}>
                     {/* Branch Cafe Selector */}
                     <div className="form-group menu-branch-selector-group">
@@ -3522,9 +3567,25 @@ export default function AdminPanel() {
                       Mark Available Immediately
                     </label>
                   </div>
-                  <button type="submit" className="btn-primary" disabled={loading} style={{ width: '100%' }}>
-                    {loading ? 'Adding...' : '✨ Add to Cafe Menu'}
-                  </button>
+                  {editingMenuItem ? (
+                    <div style={{ display: 'flex', gap: '12px', marginTop: '10px' }}>
+                      <button type="submit" className="btn-primary" disabled={loading} style={{ flex: 1 }}>
+                        {loading ? 'Saving...' : '💾 Save Changes'}
+                      </button>
+                      <button 
+                        type="button" 
+                        className="btn-select" 
+                        onClick={resetMenuItemForm} 
+                        style={{ border: '1px solid rgba(255, 255, 255, 0.1)', flex: 1, margin: 0, padding: '10px 16px', borderRadius: '8px', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem' }}
+                      >
+                        ❌ Cancel Edit
+                      </button>
+                    </div>
+                  ) : (
+                    <button type="submit" className="btn-primary" disabled={loading} style={{ width: '100%' }}>
+                      {loading ? 'Adding...' : '✨ Add to Cafe Menu'}
+                    </button>
+                  )}
                 </form>
               </div>
             </div>
@@ -3598,6 +3659,15 @@ export default function AdminPanel() {
                             <option value="out-of-stock">Out of Stock</option>
                             <option value="time-taking">Time Taking</option>
                           </select>
+                          <button 
+                            type="button"
+                            className="btn-select"
+                            onClick={() => handleStartEditMenuItem(item)}
+                            title="Edit Item Details"
+                            style={{ padding: '6px 12px', fontSize: '0.8rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px', margin: 0, border: '1px solid rgba(255,255,255,0.08)' }}
+                          >
+                            ✏️ Edit
+                          </button>
                           {deleteItemConfirmId === item.id ? (
                             <div className="inline-confirm-row">
                               <button 

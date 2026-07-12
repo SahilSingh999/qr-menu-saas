@@ -922,6 +922,13 @@ export default function CustomerView() {
   const [orderTracking, setOrderTracking] = useState(null);
   const [selectedPortions, setSelectedPortions] = useState({});
 
+  // Resolve scanned table to its primary parent table ID if a merge exists
+  const activeMerge = cafe?.table_merges?.find(merge => {
+    const tInt = parseInt(tableId);
+    return !isNaN(tInt) && (merge.primary === tInt || merge.children?.includes(tInt));
+  });
+  const resolvedTableId = activeMerge ? String(activeMerge.primary) : tableId;
+
   const toastTimeoutRef = useRef(null);
   const [toast, setToast] = useState(null);
   const showToast = (msg, type = 'info', duration = 1500) => {
@@ -1013,8 +1020,8 @@ export default function CustomerView() {
 
   // Load order tracking state from localstorage if exists
   useEffect(() => {
-    if (cafeId && tableId) {
-      const savedOrder = localStorage.getItem(`placed_order_cafe_${cafeId}_table_${tableId}`);
+    if (cafeId && resolvedTableId) {
+      const savedOrder = localStorage.getItem(`placed_order_cafe_${cafeId}_table_${resolvedTableId}`);
       if (savedOrder) {
         try {
           const parsed = JSON.parse(savedOrder);
@@ -1023,9 +1030,12 @@ export default function CustomerView() {
         } catch (e) {
           console.error('Error loading saved order', e);
         }
+      } else {
+        setPlacedOrder(null);
+        setOrderTracking(null);
       }
     }
-  }, [cafeId, tableId]);
+  }, [cafeId, resolvedTableId]);
 
   // Subscribe to real-time updates for the placed order
   useEffect(() => {
@@ -1038,7 +1048,7 @@ export default function CustomerView() {
           (payload) => {
             console.log('Customer Order Updated Realtime:', payload.new);
             setOrderTracking(payload.new);
-            localStorage.setItem(`placed_order_cafe_${cafeId}_table_${tableId}`, JSON.stringify(payload.new));
+            localStorage.setItem(`placed_order_cafe_${cafeId}_table_${resolvedTableId}`, JSON.stringify(payload.new));
           }
         )
         .subscribe();
@@ -1048,7 +1058,7 @@ export default function CustomerView() {
       };
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [placedOrder]);
+  }, [placedOrder, cafeId, resolvedTableId]);
 
   // Subscribe to BroadcastChannel for mock realtime updates when offline/fallback
   useEffect(() => {
@@ -1059,7 +1069,7 @@ export default function CustomerView() {
         if (payload.new && String(payload.new.id) === String(placedOrder.id)) {
           console.log('Customer Order Updated Mock Realtime:', payload.new);
           setOrderTracking(payload.new);
-          localStorage.setItem(`placed_order_cafe_${cafeId}_table_${tableId}`, JSON.stringify(payload.new));
+          localStorage.setItem(`placed_order_cafe_${cafeId}_table_${resolvedTableId}`, JSON.stringify(payload.new));
         }
       };
       channel.addEventListener('message', handleMessage);
@@ -1068,7 +1078,7 @@ export default function CustomerView() {
         channel.close();
       };
     }
-  }, [placedOrder, cafeId, tableId]);
+  }, [placedOrder, cafeId, resolvedTableId]);
 
   // Polling fallback to ensure status is updated even if socket connection drops on mobile device wakeups
   useEffect(() => {
@@ -1082,7 +1092,7 @@ export default function CustomerView() {
           .single();
         if (data && !error) {
           setOrderTracking(data);
-          localStorage.setItem(`placed_order_cafe_${cafeId}_table_${tableId}`, JSON.stringify(data));
+          localStorage.setItem(`placed_order_cafe_${cafeId}_table_${resolvedTableId}`, JSON.stringify(data));
         }
       } catch (err) {
         console.warn('Silent polling error:', err);
@@ -1091,7 +1101,7 @@ export default function CustomerView() {
 
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [placedOrder, cafeId, tableId]);
+  }, [placedOrder, cafeId, resolvedTableId]);
 
   const loadCafeDetails = async (id) => {
     try {
@@ -1252,7 +1262,7 @@ export default function CustomerView() {
 
     const orderData = {
       cafe_id: parseInt(cafe?.id || cafeId),
-      table_number: tableId || 'General',
+      table_number: resolvedTableId || 'General',
       items: itemsStr,
       total_price: total,
       status: 'pending'
@@ -1280,7 +1290,7 @@ export default function CustomerView() {
           setShowFullCartDrawer(false);
           setShowMenuCatalogDuringTracking(false);
           window.scrollTo({ top: 0, behavior: 'smooth' });
-          localStorage.setItem(`placed_order_cafe_${cafeId}_table_${tableId}`, JSON.stringify(newOrder));
+          localStorage.setItem(`placed_order_cafe_${cafeId}_table_${resolvedTableId}`, JSON.stringify(newOrder));
           setShowChoiceOverlay(true);
         }, 4000);
       } else {
@@ -1302,7 +1312,7 @@ export default function CustomerView() {
     try {
       const buzzerOrder = {
         cafe_id: parseInt(cafe?.id || cafeId),
-        table_number: tableId || 'General',
+        table_number: resolvedTableId || 'General',
         items: '🚨 ASSISTANCE REQUESTED (Table needs waiter help)',
         total_price: 0,
         status: 'assistance_needed'
@@ -1406,7 +1416,7 @@ export default function CustomerView() {
       if (updated) {
         setOrderTracking(updated);
         setPlacedOrder(updated);
-        localStorage.setItem(`placed_order_cafe_${cafeId}_table_${tableId}`, JSON.stringify(updated));
+        localStorage.setItem(`placed_order_cafe_${cafeId}_table_${resolvedTableId}`, JSON.stringify(updated));
         setShowBillRequestModal(false);
         setBillPhotos([]);
         setBillPhotosPreviews([]);
@@ -1446,7 +1456,7 @@ export default function CustomerView() {
       if (updated) {
         setOrderTracking(updated);
         setPlacedOrder(updated);
-        localStorage.setItem(`placed_order_cafe_${cafeId}_table_${tableId}`, JSON.stringify(updated));
+        localStorage.setItem(`placed_order_cafe_${cafeId}_table_${resolvedTableId}`, JSON.stringify(updated));
         showToast('📝 Bill request submitted successfully!', 'success');
       } else {
         showToast('❌ Failed to request bill. Please try again.', 'error');
@@ -1459,7 +1469,7 @@ export default function CustomerView() {
 
 
   const handleClearTracking = () => {
-    localStorage.removeItem(`placed_order_cafe_${cafeId}_table_${tableId}`);
+    localStorage.removeItem(`placed_order_cafe_${cafeId}_table_${resolvedTableId}`);
     setPlacedOrder(null);
     setOrderTracking(null);
     setShowCancelConfirm(false);
@@ -1735,6 +1745,12 @@ export default function CustomerView() {
           </button>
         </div>
       </div>
+
+      {activeMerge && (
+        <div className="cv-group-banner animated-slide-down">
+          <span>🔗 <strong>Group Session Active:</strong> Linked with Table {activeMerge.primary} (Group: {activeMerge.primary}, {activeMerge.children.join(', ')}). Carts & Orders are combined.</span>
+        </div>
+      )}
 
       {error && (
         <div className="alert alert-error">
@@ -2059,16 +2075,26 @@ export default function CustomerView() {
                           <span className={`cv-cat-tag tag-${item.category?.toLowerCase().replace(/\s+/g, '-')}`}>
                             {item.category}
                           </span>
-                          {item.portion_options && item.portion_options.length > 0 && (
-                            <select
-                              className="cv-portion-select"
-                              value={selectedPortions[item.id] || ''}
-                              onChange={(e) => setSelectedPortions({ ...selectedPortions, [item.id]: e.target.value })}
-                            >
-                              {item.portion_options.map(p => (
-                                <option key={p} value={p}>{p}</option>
-                              ))}
-                            </select>
+                           {item.portion_options && item.portion_options.length > 0 && (
+                            <div className="cv-portions-container">
+                              {item.portion_options.map(p => {
+                                const isMultiple = item.portion_options.length > 1;
+                                const isActive = selectedPortions[item.id] === p;
+                                return (
+                                  <span
+                                    key={p}
+                                    className={`cv-portion-pill ${!isMultiple ? 'static' : ''} ${isActive && isMultiple ? 'active' : ''}`}
+                                    onClick={() => {
+                                      if (isMultiple) {
+                                        setSelectedPortions({ ...selectedPortions, [item.id]: p });
+                                      }
+                                    }}
+                                  >
+                                    {p}
+                                  </span>
+                                );
+                              })}
+                            </div>
                           )}
                           {(() => {
                             const selectedPortion = selectedPortions[item.id] || null;

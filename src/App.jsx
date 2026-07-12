@@ -25,7 +25,10 @@ function AppRoutes() {
       {/* Routing Workspace */}
       <div className={isCustomer ? '' : 'routing-workspace'}>
         <Routes>
-          <Route path="/admin" element={<AdminPanel />} />
+          {/* Cafe Owner admin panel — only shows owner login */}
+          <Route path="/admin" element={<AdminPanel mode="owner" key="owner" />} />
+          {/* Super Admin console — hidden URL, shows super admin login only */}
+          <Route path="/superadmin" element={<AdminPanel mode="superadmin" key="superadmin" />} />
           <Route path="/waiter" element={<WaiterDashboard />} />
           <Route path="/table/:tableId" element={<CustomerView />} />
           {/* Fallback Redirection */}
