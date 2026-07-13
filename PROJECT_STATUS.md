@@ -169,15 +169,14 @@ id, cafe_id, table_number, items (JSON text), total_price, status, created_at
 
 ## ▶️ Exact Next Task to Resume
 
-1. **Review and Execute Database Schema Synchronization**:
-   - Create the migration SQL file in `supabase/migrations` to add SaaS overrides (footer message, currency, font family, logo placement, table merges, stock levels, recipes, and status fields) directly into the Supabase database.
-   - Refactor client queries in `SupabaseContext.jsx` to read and write directly to/from these new database columns.
-   - Run the client-side migration hooks to move legacy overrides from `localStorage` to the database securely with zero data loss.
+1. **Apply Schema Synchronization to Remote Database**:
+   - Run the created migration file `supabase/migrations/20260713000000_sync_schema.sql` on the live database.
+   - The application is fully prepared to dynamically transition data from client-side overrides to the new database columns on next start once these columns exist in the database schema.
 
 ---
 
 ## 💡 Important Notes for Next Session
-- The app currently uses **localStorage** for configurations not yet in the DB schema. After database synchronization, all configurations will be fully stored on the server.
+- All SaaS custom attributes (branding configurations, inventory stock, table merges, recipes, etc.) are now fully database-integrated in `SupabaseContext.jsx`.
+- If the database columns do not exist yet, the application safely degrades to local overrides as a fallback and will automatically migrate them once the schema is updated.
 - `npm run dev` must be running for the dev server at `http://localhost:5173`.
-- Supabase credentials are in `.env` as `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
 

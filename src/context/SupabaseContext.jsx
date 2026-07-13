@@ -20,28 +20,112 @@ export const SupabaseProvider = ({ children }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  const syncLocalOverridesToDatabase = async () => {
+    // 1. Sync Cafes Overrides
+    const cafeOverrides = JSON.parse(localStorage.getItem('cafes_saas_overrides') || '{}');
+    const cafeIds = Object.keys(cafeOverrides);
+    if (cafeIds.length > 0) {
+      console.log(`Starting migration of ${cafeIds.length} cafe overrides to database...`);
+      for (const id of cafeIds) {
+        const updates = cafeOverrides[id];
+        try {
+          const payload = {};
+          if (updates.admin_username !== undefined) payload.admin_username = updates.admin_username;
+          if (updates.footer_message !== undefined) payload.footer_message = updates.footer_message;
+          if (updates.font_family !== undefined) payload.font_family = updates.font_family;
+          if (updates.logo_placement !== undefined) payload.logo_placement = updates.logo_placement;
+          if (updates.table_merges !== undefined) payload.table_merges = updates.table_merges;
+
+          if (Object.keys(payload).length > 0) {
+            const { error: err } = await supabase
+              .from('cafes')
+              .update(payload)
+              .eq('id', id);
+            
+            if (!err) {
+              delete cafeOverrides[id];
+            } else {
+              console.warn(`Failed to migrate cafe override for ID ${id}:`, err.message);
+              if (err.code === '42703' || err.message.includes('column')) {
+                break; // Missing columns on DB, stop migration for now
+              }
+            }
+          } else {
+            delete cafeOverrides[id];
+          }
+        } catch (err) {
+          console.error(`Error migrating cafe override for ${id}:`, err);
+        }
+      }
+      if (Object.keys(cafeOverrides).length === 0) {
+        localStorage.removeItem('cafes_saas_overrides');
+      } else {
+        localStorage.setItem('cafes_saas_overrides', JSON.stringify(cafeOverrides));
+      }
+    }
+
+    // 2. Sync Menu Items Overrides
+    const itemOverrides = JSON.parse(localStorage.getItem('menu_items_local_overrides') || '{}');
+    const stockOverrides = JSON.parse(localStorage.getItem('menu_items_stock_overrides') || '{}');
+    const itemIds = Array.from(new Set([...Object.keys(itemOverrides), ...Object.keys(stockOverrides)]));
+    
+    if (itemIds.length > 0) {
+      console.log(`Starting migration of ${itemIds.length} menu item overrides to database...`);
+      for (const id of itemIds) {
+        const itemOverride = itemOverrides[id] || {};
+        const stockOverride = stockOverrides[id] || {};
+        const merged = {
+          ...itemOverride,
+          ...stockOverride
+        };
+        try {
+          const updates = {};
+          if (merged.stock !== undefined && merged.stock !== null) updates.stock = merged.stock;
+          if (merged.low_stock_threshold !== undefined && merged.low_stock_threshold !== null) updates.low_stock_threshold = merged.low_stock_threshold;
+          if (merged.stock_unit !== undefined) updates.stock_unit = merged.stock_unit;
+          if (merged.recipe !== undefined) updates.recipe = merged.recipe;
+          if (merged.availability_status !== undefined) updates.availability_status = merged.availability_status;
+
+          if (Object.keys(updates).length > 0) {
+            const { error: err } = await supabase
+              .from('menu_items')
+              .update(updates)
+              .eq('id', id);
+            
+            if (!err) {
+              delete itemOverrides[id];
+              delete stockOverrides[id];
+            } else {
+              console.warn(`Failed to migrate menu item override for ID ${id}:`, err.message);
+              if (err.code === '42703' || err.message.includes('column')) {
+                break; // Missing columns on DB, stop migration for now
+              }
+            }
+          } else {
+            delete itemOverrides[id];
+            delete stockOverrides[id];
+          }
+        } catch (err) {
+          console.error(`Error migrating menu item override for ${id}:`, err);
+        }
+      }
+      
+      if (Object.keys(itemOverrides).length === 0) {
+        localStorage.removeItem('menu_items_local_overrides');
+      } else {
+        localStorage.setItem('menu_items_local_overrides', JSON.stringify(itemOverrides));
+      }
+      
+      if (Object.keys(stockOverrides).length === 0) {
+        localStorage.removeItem('menu_items_stock_overrides');
+      } else {
+        localStorage.setItem('menu_items_stock_overrides', JSON.stringify(stockOverrides));
+      }
+    }
+  };
+
   React.useEffect(() => {
-    const overrides = JSON.parse(localStorage.getItem('cafes_saas_overrides') || '{}');
-    let changed = false;
-    if (!overrides[1] || !overrides[1].admin_username) {
-      overrides[1] = {
-        ...overrides[1],
-        admin_username: 'trackside',
-        footer_message: 'Thank You For Dining With Us!'
-      };
-      changed = true;
-    }
-    if (!overrides[3] || !overrides[3].admin_username) {
-      overrides[3] = {
-        ...overrides[3],
-        admin_username: 'newtest',
-        footer_message: 'Thank You For Dining With Us!'
-      };
-      changed = true;
-    }
-    if (changed) {
-      localStorage.setItem('cafes_saas_overrides', JSON.stringify(overrides));
-    }
+    syncLocalOverridesToDatabase();
   }, []);
 
   // LocalStorage Mock Helpers
@@ -147,13 +231,33 @@ export const SupabaseProvider = ({ children }) => {
         expires_at: expiresAt
       };
 
-      // Separate unsupported database columns to prevent database-level insert crashes
-      const { admin_username, footer_message, font_family, logo_placement, table_merges, ...supabaseItem } = updatedCafePayload;
-
-      const { data, error: err } = await supabase
+      // Try inserting with all fields first (supporting new schema columns)
+      let { data, error: err } = await supabase
         .from('cafes')
-        .insert([supabaseItem])
+        .insert([updatedCafePayload])
         .select();
+
+      // If database is not migrated yet (missing columns), fall back to stripped payload and local overrides
+      if (err && (err.code === '42703' || err.message.includes('column'))) {
+        console.warn('New columns missing in cafes table. Inserting cleaned payload and saving local overrides.');
+        const { admin_username, footer_message, font_family, logo_placement, table_merges, ...cleanPayload } = updatedCafePayload;
+        const cleanRes = await supabase.from('cafes').insert([cleanPayload]).select();
+        data = cleanRes.data;
+        err = cleanRes.error;
+
+        if (!err && data && data[0]) {
+          const overrides = JSON.parse(localStorage.getItem('cafes_saas_overrides') || '{}');
+          overrides[data[0].id] = {
+            ...(overrides[data[0].id] || {}),
+            ...(admin_username !== undefined ? { admin_username } : {}),
+            ...(footer_message !== undefined ? { footer_message } : {}),
+            ...(font_family !== undefined ? { font_family } : {}),
+            ...(logo_placement !== undefined ? { logo_placement } : {}),
+            ...(table_merges !== undefined ? { table_merges } : {})
+          };
+          localStorage.setItem('cafes_saas_overrides', JSON.stringify(overrides));
+        }
+      }
 
       let createdCafe = null;
       if (err) {
@@ -171,21 +275,6 @@ export const SupabaseProvider = ({ children }) => {
       }
 
       if (createdCafe) {
-        // Save unsupported schema variables as overrides
-        if (admin_username !== undefined || footer_message !== undefined || font_family !== undefined || logo_placement !== undefined || table_merges !== undefined) {
-          const overrides = JSON.parse(localStorage.getItem('cafes_saas_overrides') || '{}');
-          overrides[createdCafe.id] = {
-            ...overrides[createdCafe.id],
-            ...(admin_username !== undefined ? { admin_username } : {}),
-            ...(footer_message !== undefined ? { footer_message } : {}),
-            ...(font_family !== undefined ? { font_family } : {}),
-            ...(logo_placement !== undefined ? { logo_placement } : {}),
-            ...(table_merges !== undefined ? { table_merges } : {})
-          };
-          localStorage.setItem('cafes_saas_overrides', JSON.stringify(overrides));
-        }
-
-        // Apply overrides to return object
         const overrides = JSON.parse(localStorage.getItem('cafes_saas_overrides') || '{}');
         createdCafe = {
           ...createdCafe,
@@ -194,8 +283,9 @@ export const SupabaseProvider = ({ children }) => {
         if (!createdCafe.table_merges) {
           createdCafe.table_merges = [];
         }
+        return createdCafe;
       }
-      return createdCafe;
+      return null;
     } catch (err) {
       setError(err.message);
       console.error('Error creating cafe:', err);
@@ -208,53 +298,50 @@ export const SupabaseProvider = ({ children }) => {
   const updateCafe = async (id, updates) => {
     setLoading(true);
     setError(null);
-    const { admin_username, footer_message, font_family, logo_placement, table_merges, ...supabaseUpdates } = updates;
-
-    // Save unsupported schema variables as overrides immediately
-    if (admin_username !== undefined || footer_message !== undefined || font_family !== undefined || logo_placement !== undefined || table_merges !== undefined) {
-      const overrides = JSON.parse(localStorage.getItem('cafes_saas_overrides') || '{}');
-      overrides[id] = {
-        ...overrides[id],
-        ...(admin_username !== undefined ? { admin_username } : {}),
-        ...(footer_message !== undefined ? { footer_message } : {}),
-        ...(font_family !== undefined ? { font_family } : {}),
-        ...(logo_placement !== undefined ? { logo_placement } : {}),
-        ...(table_merges !== undefined ? { table_merges } : {})
-      };
-      localStorage.setItem('cafes_saas_overrides', JSON.stringify(overrides));
-    }
-
     try {
       let updatedCafe = null;
-      if (Object.keys(supabaseUpdates).length > 0) {
-        const { data, error: err } = await supabase
-          .from('cafes')
-          .update(supabaseUpdates)
-          .eq('id', id)
-          .select();
+      let { data, error: err } = await supabase
+        .from('cafes')
+        .update(updates)
+        .eq('id', id)
+        .select();
+
+      // If database is not migrated yet (missing columns), fall back to stripped updates and local overrides
+      if (err && (err.code === '42703' || err.message.includes('column'))) {
+        console.warn('New columns missing in cafes table for update. Updating cleaned payload and saving local overrides.');
+        const { admin_username, footer_message, font_family, logo_placement, table_merges, ...cleanUpdates } = updates;
         
-        if (err) {
-          console.warn('updateCafe query error. Falling back to LocalStorage:', err);
-          const list = getMockData('cafes');
-          const updated = list.map(c => c.id === id ? { ...c, ...updates } : c);
-          setMockData('cafes', updated);
-          updatedCafe = updated.find(c => c.id === id);
+        let cleanRes = { data: null, error: null };
+        if (Object.keys(cleanUpdates).length > 0) {
+          cleanRes = await supabase.from('cafes').update(cleanUpdates).eq('id', id).select();
         } else {
-          updatedCafe = data[0];
+          cleanRes = await supabase.from('cafes').select('*').eq('id', id);
         }
+        data = cleanRes.data;
+        err = cleanRes.error;
+
+        if (!err && data && data[0]) {
+          const overrides = JSON.parse(localStorage.getItem('cafes_saas_overrides') || '{}');
+          overrides[id] = {
+            ...(overrides[id] || {}),
+            ...(admin_username !== undefined ? { admin_username } : {}),
+            ...(footer_message !== undefined ? { footer_message } : {}),
+            ...(font_family !== undefined ? { font_family } : {}),
+            ...(logo_placement !== undefined ? { logo_placement } : {}),
+            ...(table_merges !== undefined ? { table_merges } : {})
+          };
+          localStorage.setItem('cafes_saas_overrides', JSON.stringify(overrides));
+        }
+      }
+
+      if (err) {
+        console.warn('updateCafe query error. Falling back to LocalStorage:', err);
+        const list = getMockData('cafes');
+        const updated = list.map(c => c.id === id ? { ...c, ...updates } : c);
+        setMockData('cafes', updated);
+        updatedCafe = updated.find(c => c.id === id);
       } else {
-        // Fetch current cafe structure to merge with overrides
-        const { data, error: err } = await supabase
-          .from('cafes')
-          .select('*')
-          .eq('id', id)
-          .single();
-        if (!err && data) {
-          updatedCafe = data;
-        } else {
-          const list = getMockData('cafes');
-          updatedCafe = list.find(c => c.id === id);
-        }
+        updatedCafe = data[0];
       }
 
       if (updatedCafe) {
@@ -263,12 +350,14 @@ export const SupabaseProvider = ({ children }) => {
           ...updatedCafe,
           ...(overrides[updatedCafe.id] || {})
         };
+        if (!updatedCafe.table_merges) {
+          updatedCafe.table_merges = [];
+        }
       }
       return updatedCafe;
     } catch (err) {
       console.warn('updateCafe threw. Falling back to LocalStorage:', err.message);
       const list = getMockData('cafes');
-      // If the cafe is from DB but wasn't in mock, let's fetch and seed it in mock
       let target = list.find(c => c.id === id);
       if (!target) {
         try {
@@ -295,6 +384,9 @@ export const SupabaseProvider = ({ children }) => {
           ...res,
           ...(overrides[res.id] || {})
         };
+        if (!res.table_merges) {
+          res.table_merges = [];
+        }
       }
       return res;
     } finally {
@@ -539,13 +631,35 @@ export const SupabaseProvider = ({ children }) => {
     setLoading(true);
     setError(null);
     try {
-      // Since admin_username is local, we fetch all cafes and search locally
-      const list = await fetchCafes();
-      return list ? list.find(c => c.admin_username === username) || null : null;
+      const { data, error: err } = await supabase
+        .from('cafes')
+        .select('*')
+        .eq('admin_username', username.trim().toLowerCase())
+        .maybeSingle();
+
+      if (err) {
+        console.warn('fetchCafeByUsername query error. Falling back to LocalStorage lookup:', err);
+        const list = await fetchCafes();
+        return list ? list.find(c => c.admin_username === username) || null : null;
+      }
+
+      if (data) {
+        const overrides = JSON.parse(localStorage.getItem('cafes_saas_overrides') || '{}');
+        const cafe = {
+          ...data,
+          ...(overrides[data.id] || {})
+        };
+        if (!cafe.table_merges) {
+          cafe.table_merges = [];
+        }
+        return cafe;
+      }
+      return null;
     } catch (err) {
       setError(err.message);
       console.error('Error fetching cafe by username:', err);
-      return null;
+      const list = await fetchCafes();
+      return list ? list.find(c => c.admin_username === username) || null : null;
     } finally {
       setLoading(false);
     }
@@ -708,13 +822,39 @@ export const SupabaseProvider = ({ children }) => {
   const createMenuItem = async (item) => {
     setLoading(true);
     setError(null);
-    // Separate stock and other non-DB fields for schema safety
-    const { stock, low_stock_threshold, stock_unit, recipe, availability_status, ...supabaseItem } = item;
     try {
-      const { data, error: err } = await supabase
+      let { data, error: err } = await supabase
         .from('menu_items')
-        .insert([supabaseItem])
+        .insert([item])
         .select();
+
+      // If database is not migrated yet (missing columns), fall back to stripped payload and local overrides
+      if (err && (err.code === '42703' || err.message.includes('column'))) {
+        console.warn('New columns missing in menu_items table. Inserting cleaned payload and saving local overrides.');
+        const { stock, low_stock_threshold, stock_unit, recipe, availability_status, ...cleanItem } = item;
+        const cleanRes = await supabase.from('menu_items').insert([cleanItem]).select();
+        data = cleanRes.data;
+        err = cleanRes.error;
+
+        if (!err && data && data[0]) {
+          const overrides = JSON.parse(localStorage.getItem('menu_items_local_overrides') || '{}');
+          const overrideEntry = {
+            stock_unit: stock_unit !== undefined ? stock_unit : 'pcs',
+            recipe: recipe !== undefined ? recipe : [],
+            availability_status: availability_status !== undefined ? availability_status : (data[0].is_available ? 'available' : 'out_of_stock')
+          };
+          if (stock !== undefined && stock !== null) {
+            overrideEntry.stock = stock;
+            overrideEntry._stockExplicitlySet = true;
+          }
+          if (low_stock_threshold !== undefined && low_stock_threshold !== null) {
+            overrideEntry.low_stock_threshold = low_stock_threshold;
+          }
+          overrides[data[0].id] = overrideEntry;
+          localStorage.setItem('menu_items_local_overrides', JSON.stringify(overrides));
+        }
+      }
+
       if (err) {
         if (err.code === 'PGRST205' || err.message.includes('column')) {
           const list = getMockData('menu_items');
@@ -731,32 +871,20 @@ export const SupabaseProvider = ({ children }) => {
       }
       const createdItem = data[0];
       
-      // Store local overrides associated with the new ID.
-      // Only save stock if a non-null, non-undefined value was provided by the user.
-      // Storing null would cause false "Out of Stock" detection on merge.
-      const overrides = JSON.parse(localStorage.getItem('menu_items_local_overrides') || '{}');
-      const overrideEntry = {
-        stock_unit: stock_unit !== undefined ? stock_unit : 'pcs',
-        recipe: recipe !== undefined ? recipe : [],
-        availability_status: availability_status !== undefined ? availability_status : (createdItem.is_available ? 'available' : 'out_of_stock')
+      const stockOverrides = JSON.parse(localStorage.getItem('menu_items_stock_overrides') || '{}');
+      const localOverrides = JSON.parse(localStorage.getItem('menu_items_local_overrides') || '{}');
+      const itemOverride = {
+        ...(stockOverrides[createdItem.id] || {}),
+        ...(localOverrides[createdItem.id] || {})
       };
-      // Only include stock / low_stock_threshold if they were explicitly set to a number
-      if (stock !== undefined && stock !== null) {
-        overrideEntry.stock = stock;
-        overrideEntry._stockExplicitlySet = true; // prevents the stale-data purge from removing this
-      }
-      if (low_stock_threshold !== undefined && low_stock_threshold !== null) overrideEntry.low_stock_threshold = low_stock_threshold;
-      overrides[createdItem.id] = overrideEntry;
-      localStorage.setItem('menu_items_local_overrides', JSON.stringify(overrides));
-
 
       return {
         ...createdItem,
-        stock,
-        low_stock_threshold,
-        stock_unit: stock_unit || 'pcs',
-        recipe: recipe || [],
-        availability_status: availability_status || (createdItem.is_available ? 'available' : 'out_of_stock')
+        stock: (itemOverride.stock !== undefined && itemOverride.stock !== null) ? itemOverride.stock : createdItem.stock,
+        low_stock_threshold: itemOverride.low_stock_threshold !== undefined ? itemOverride.low_stock_threshold : createdItem.low_stock_threshold,
+        stock_unit: itemOverride.stock_unit !== undefined ? itemOverride.stock_unit : (createdItem.stock_unit || 'pcs'),
+        recipe: itemOverride.recipe !== undefined ? itemOverride.recipe : (createdItem.recipe || []),
+        availability_status: itemOverride.availability_status !== undefined ? itemOverride.availability_status : (createdItem.availability_status || (createdItem.is_available ? 'available' : 'out_of_stock'))
       };
     } catch (err) {
       setError(err.message);
@@ -778,65 +906,68 @@ export const SupabaseProvider = ({ children }) => {
   const updateMenuItem = async (id, updates) => {
     setLoading(true);
     setError(null);
-    // Separate non-DB fields
-    const { stock, low_stock_threshold, stock_unit, recipe, availability_status, ...supabaseUpdates } = updates;
-    
-    // Save to overrides immediately
-    const overrides = JSON.parse(localStorage.getItem('menu_items_local_overrides') || '{}');
-    overrides[id] = {
-      ...(overrides[id] || {}),
-      ...(stock !== undefined ? { stock } : {}),
-      ...(low_stock_threshold !== undefined ? { low_stock_threshold } : {}),
-      ...(stock_unit !== undefined ? { stock_unit } : {}),
-      ...(recipe !== undefined ? { recipe } : {}),
-      ...(availability_status !== undefined ? { availability_status } : {})
-    };
-    localStorage.setItem('menu_items_local_overrides', JSON.stringify(overrides));
-
     try {
       let updatedItem = null;
-      if (Object.keys(supabaseUpdates).length > 0) {
-        const { data, error: err } = await supabase
-          .from('menu_items')
-          .update(supabaseUpdates)
-          .eq('id', id)
-          .select();
-        if (err) {
-          if (err.code === 'PGRST205' || err.message.includes('column')) {
-            const list = getMockData('menu_items');
-            const updated = list.map(m => m.id === id ? { ...m, ...updates } : m);
-            setMockData('menu_items', updated);
-            return updated.find(m => m.id === id);
-          }
-          throw err;
-        }
-        updatedItem = data[0];
-      } else {
-        const { data, error: err } = await supabase
-          .from('menu_items')
-          .select('*')
-          .eq('id', id);
-        if (!err && data && data.length > 0) {
-          updatedItem = data[0];
+      let { data, error: err } = await supabase
+        .from('menu_items')
+        .update(updates)
+        .eq('id', id)
+        .select();
+
+      // If database is not migrated yet (missing columns), fall back to stripped updates and local overrides
+      if (err && (err.code === '42703' || err.message.includes('column'))) {
+        console.warn('New columns missing in menu_items table for update. Updating cleaned payload and saving local overrides.');
+        const { stock, low_stock_threshold, stock_unit, recipe, availability_status, ...cleanUpdates } = updates;
+        
+        let cleanRes = { data: null, error: null };
+        if (Object.keys(cleanUpdates).length > 0) {
+          cleanRes = await supabase.from('menu_items').update(cleanUpdates).eq('id', id).select();
         } else {
-          const list = getMockData('menu_items');
-          updatedItem = list.find(m => m.id === id);
+          cleanRes = await supabase.from('menu_items').select('*').eq('id', id);
+        }
+        data = cleanRes.data;
+        err = cleanRes.error;
+
+        if (!err && data && data[0]) {
+          const overrides = JSON.parse(localStorage.getItem('menu_items_local_overrides') || '{}');
+          overrides[id] = {
+            ...(overrides[id] || {}),
+            ...(stock !== undefined ? { stock } : {}),
+            ...(low_stock_threshold !== undefined ? { low_stock_threshold } : {}),
+            ...(stock_unit !== undefined ? { stock_unit } : {}),
+            ...(recipe !== undefined ? { recipe } : {}),
+            ...(availability_status !== undefined ? { availability_status } : {})
+          };
+          localStorage.setItem('menu_items_local_overrides', JSON.stringify(overrides));
         }
       }
+
+      if (err) {
+        if (err.code === 'PGRST205' || err.message.includes('column')) {
+          const list = getMockData('menu_items');
+          const updated = list.map(m => m.id === id ? { ...m, ...updates } : m);
+          setMockData('menu_items', updated);
+          return updated.find(m => m.id === id);
+        }
+        throw err;
+      }
+      updatedItem = data[0];
+
       if (!updatedItem) return null;
       
       const stockOverrides = JSON.parse(localStorage.getItem('menu_items_stock_overrides') || '{}');
+      const localOverrides = JSON.parse(localStorage.getItem('menu_items_local_overrides') || '{}');
       const itemOverride = {
         ...(stockOverrides[id] || {}),
-        ...(overrides[id] || {})
+        ...(localOverrides[id] || {})
       };
       return {
         ...updatedItem,
-        stock: (itemOverride.stock !== undefined && itemOverride.stock !== null) ? itemOverride.stock : (updatedItem.stock !== undefined && updatedItem.stock !== null ? updatedItem.stock : undefined),
+        stock: (itemOverride.stock !== undefined && itemOverride.stock !== null) ? itemOverride.stock : updatedItem.stock,
         low_stock_threshold: itemOverride.low_stock_threshold !== undefined ? itemOverride.low_stock_threshold : updatedItem.low_stock_threshold,
         stock_unit: itemOverride.stock_unit !== undefined ? itemOverride.stock_unit : (updatedItem.stock_unit || 'pcs'),
-        recipe: itemOverride.recipe !== undefined ? itemOverride.recipe : [],
-        availability_status: itemOverride.availability_status !== undefined ? itemOverride.availability_status : (updatedItem.is_available ? 'available' : 'out_of_stock')
+        recipe: itemOverride.recipe !== undefined ? itemOverride.recipe : (updatedItem.recipe || []),
+        availability_status: itemOverride.availability_status !== undefined ? itemOverride.availability_status : (updatedItem.availability_status || (updatedItem.is_available ? 'available' : 'out_of_stock'))
       };
 
     } catch (err) {
@@ -846,19 +977,20 @@ export const SupabaseProvider = ({ children }) => {
       setMockData('menu_items', updated);
       
       const stockOverrides = JSON.parse(localStorage.getItem('menu_items_stock_overrides') || '{}');
+      const localOverrides = JSON.parse(localStorage.getItem('menu_items_local_overrides') || '{}');
       let res = updated.find(m => m.id === id);
       if (res) {
         const itemOverride = {
           ...(stockOverrides[id] || {}),
-          ...(overrides[id] || {})
+          ...(localOverrides[id] || {})
         };
         res = {
           ...res,
           stock: itemOverride.stock !== undefined ? itemOverride.stock : res.stock,
           low_stock_threshold: itemOverride.low_stock_threshold !== undefined ? itemOverride.low_stock_threshold : res.low_stock_threshold,
           stock_unit: itemOverride.stock_unit !== undefined ? itemOverride.stock_unit : (res.stock_unit || 'pcs'),
-          recipe: itemOverride.recipe !== undefined ? itemOverride.recipe : [],
-          availability_status: itemOverride.availability_status !== undefined ? itemOverride.availability_status : (res.is_available ? 'available' : 'out_of_stock')
+          recipe: itemOverride.recipe !== undefined ? itemOverride.recipe : (res.recipe || []),
+          availability_status: itemOverride.availability_status !== undefined ? itemOverride.availability_status : (res.availability_status || (res.is_available ? 'available' : 'out_of_stock'))
         };
       }
       return res;

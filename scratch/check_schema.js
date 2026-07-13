@@ -17,11 +17,15 @@ const supabaseAnonKey = env.VITE_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 async function run() {
-  const { data, error } = await supabase.from('cafes').select('*').limit(1);
-  if (error) {
-    console.error(error);
-  } else {
-    console.log('Columns of cafes table:', Object.keys(data[0]).join(', '));
+  for (const table of ['cafes', 'menu_items', 'orders']) {
+    const { data, error } = await supabase.from(table).select('*').limit(1);
+    if (error) {
+      console.error(`Error querying table ${table}:`, error.message);
+    } else if (data && data.length > 0) {
+      console.log(`Columns of ${table} table:`, Object.keys(data[0]).join(', '));
+    } else {
+      console.log(`Table ${table} is empty.`);
+    }
   }
 }
 run();
