@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSupabase } from '../context/SupabaseContext';
 import { useCurrency } from '../context/CurrencyContext';
+import { verifySuperAdmin, verifyPassword } from '../utils/security';
 
 export default function AdminPanel({ mode = 'owner' }) {
   const {
@@ -609,8 +610,8 @@ export default function AdminPanel({ mode = 'owner' }) {
     setAdminAlertMsg('');
 
     if (loginTab === 'super') {
-      const usernameLower = superAdminUsername.trim().toLowerCase();
-      if (usernameLower === 'saassuperqr999' && superAdminPassword === 'SuperAdmin8080') {
+      const isSuperValid = await verifySuperAdmin(superAdminUsername, superAdminPassword);
+      if (isSuperValid) {
         setIsSuperAdminSession(true);
         localStorage.setItem('is_super_admin_session', 'true');
         
@@ -648,7 +649,8 @@ export default function AdminPanel({ mode = 'owner' }) {
         return;
       }
       const correctPassword = target.admin_password || 'admin123';
-      if (loginPassword === correctPassword) {
+      const isPasswordValid = await verifyPassword(loginPassword, correctPassword);
+      if (isPasswordValid) {
         setAdminSession(target.id);
         setSelectedCafe(target);
         localStorage.setItem('admin_session_cafe_id', String(target.id));
