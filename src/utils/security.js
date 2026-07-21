@@ -53,12 +53,17 @@ export async function verifySuperAdmin(username, password) {
 export async function verifyPassword(enteredPassword, storedPassword) {
   if (!enteredPassword || !storedPassword) return false;
   
+  const cleanEntered = String(enteredPassword).trim();
+  const cleanStored = String(storedPassword).trim();
+  
   // Direct match for legacy unhashed passwords
-  if (enteredPassword === storedPassword) return true;
+  if (cleanEntered === cleanStored || enteredPassword === storedPassword) return true;
   
   // SHA-256 hash comparison
-  const enteredHash = await hashPassword(enteredPassword);
-  return enteredHash === storedPassword;
+  const enteredHash = await hashPassword(cleanEntered);
+  if (enteredHash === cleanStored || enteredHash === storedPassword) return true;
+  
+  return false;
 }
 
 /**
@@ -71,9 +76,16 @@ export function formatQrDomain(url) {
   const DEFAULT_DOMAIN = 'https://qr-menu-saas.vercel.app';
   if (!url || !url.trim()) return DEFAULT_DOMAIN;
   let trimmed = url.trim().replace(/\/+$/, '');
+  
+  // Replace Vercel preview deployment URLs (*-projects.vercel.app) with the official production URL to prevent Vercel Authentication prompts on mobile phones
+  if (trimmed.includes('-projects.vercel.app')) {
+    return DEFAULT_DOMAIN;
+  }
+  
   if (!/^https?:\/\//i.test(trimmed)) {
     trimmed = `https://${trimmed}`;
   }
   return trimmed;
 }
+
 

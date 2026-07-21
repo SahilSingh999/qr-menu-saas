@@ -637,16 +637,31 @@ export const SupabaseProvider = ({ children }) => {
     setLoading(true);
     setError(null);
     try {
-      const { data, error: err } = await supabase
+      const cleanUser = (username || '').trim().toLowerCase();
+      if (!cleanUser) return null;
+
+      let { data, error: err } = await supabase
         .from('cafes')
         .select('*')
-        .eq('admin_username', username.trim().toLowerCase())
+        .eq('admin_username', cleanUser)
         .maybeSingle();
 
-      if (err) {
-        console.warn('fetchCafeByUsername query error. Falling back to LocalStorage lookup:', err);
+      if (err || !data) {
+        // Fallback search across all cafes by admin_username, name match, or activation key
         const list = await fetchCafes();
-        return list ? list.find(c => c.admin_username === username) || null : null;
+        if (list) {
+          const cleanSearch = cleanUser.replace(/[^a-z0-9]/g, '');
+          const matched = list.find(c => {
+            const cUsername = (c.admin_username || '').toLowerCase();
+            const cName = (c.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            const cKey = (c.activation_key || '').toLowerCase();
+            
+            return (cUsername && cUsername === cleanUser) ||
+                   (cleanSearch && (cName === cleanSearch || cName.includes(cleanSearch) || cleanSearch.includes(cName))) ||
+                   (cKey && cKey === cleanUser);
+          });
+          if (matched) return matched;
+        }
       }
 
       if (data) {
@@ -665,7 +680,7 @@ export const SupabaseProvider = ({ children }) => {
       setError(err.message);
       console.error('Error fetching cafe by username:', err);
       const list = await fetchCafes();
-      return list ? list.find(c => c.admin_username === username) || null : null;
+      return list ? list.find(c => (c.admin_username || '').toLowerCase() === (username || '').trim().toLowerCase()) || null : null;
     } finally {
       setLoading(false);
     }
