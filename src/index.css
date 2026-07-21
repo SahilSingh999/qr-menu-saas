@@ -3143,65 +3143,57 @@ footer code {
 
 /* ============================================================
    BULLETPROOF PRINT ISOLATION
-   - Hides all UI, shows ONLY the dedicated printable container
-   - Works on Chrome, Edge, Safari, iOS, Android print-to-PDF
+   KEY RULE: Use visibility:hidden (NOT display:none) on parents
+   so that children can override with visibility:visible.
+   display:none on a parent hides ALL children permanently —
+   even position:fixed cannot escape it.
    ============================================================ */
 @media print {
-  /* STEP 1: Hide absolutely everything in the DOM */
-  body > *,
-  #root > *,
-  .app-container > *,
-  .routing-workspace > *,
-  .admin-panel-container > *,
-  .pane-layout,
-  .pane-left-column,
-  .pane-right-column,
-  .tabs-container,
-  .navbar-container,
-  .blob,
-  .blob-1,
-  .blob-2 {
-    display: none !important;
+  /* STEP 1: Make the entire page invisible using visibility (not display:none!) */
+  body * {
     visibility: hidden !important;
   }
 
-  /* STEP 2: Force full-page white canvas */
+  /* STEP 2: Force white background on root elements */
   html, body, #root {
     background: #ffffff !important;
-    color: #000000 !important;
-    height: auto !important;
-    min-height: 0 !important;
-    overflow: visible !important;
     padding: 0 !important;
     margin: 0 !important;
-    box-shadow: none !important;
-    border: none !important;
-    backdrop-filter: none !important;
   }
 
-  /* STEP 3: Reveal ONLY the printable content containers */
+  /* STEP 3: Reveal ONLY the printable containers and ALL their children */
   .printable-qr-sheet,
-  .printable-bill-wrapper {
-    display: block !important;
+  .printable-qr-sheet *,
+  .printable-bill-wrapper,
+  .printable-bill-wrapper * {
     visibility: visible !important;
-    position: fixed !important;
+  }
+
+  /* STEP 4: Position the printable container to cover the full page */
+  .printable-qr-sheet {
+    display: block !important;
+    position: absolute !important;
     top: 0 !important;
     left: 0 !important;
     width: 100% !important;
-    height: auto !important;
-    min-height: 100vh !important;
     background: #ffffff !important;
     color: #000000 !important;
-    z-index: 99999 !important;
-    overflow: visible !important;
-    padding: 0 !important;
-    margin: 0 !important;
   }
 
-  /* Ensure ALL descendants of printable containers are visible */
+  .printable-bill-wrapper {
+    display: block !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    padding: 1rem !important;
+  }
+
+  /* STEP 5: Reset colors on all printable content */
   .printable-qr-sheet *,
   .printable-bill-wrapper * {
-    visibility: visible !important;
     color: #000000 !important;
     background: transparent !important;
     box-shadow: none !important;
@@ -3210,7 +3202,7 @@ footer code {
     -webkit-backdrop-filter: none !important;
   }
 
-  /* STEP 4: QR Sticker Grid Layout */
+  /* STEP 6: QR Sticker Grid Layout */
   .stickers-print-grid {
     display: grid !important;
     grid-template-columns: repeat(3, 1fr) !important;
@@ -3279,7 +3271,7 @@ footer code {
     text-align: center !important;
   }
 
-  /* STEP 5: Bill receipt */
+  /* STEP 7: Bill receipt table */
   .printable-bill-wrapper .bill-header h1 {
     font-size: 1.4rem !important;
     font-weight: 800 !important;
@@ -3305,17 +3297,19 @@ footer code {
     font-weight: 700 !important;
   }
 
-  /* Hide print-time-irrelevant elements inside bill */
+  /* Hide UI-only elements even inside bill */
   .printable-bill-wrapper .bill-modal-overlay,
   .printable-bill-wrapper .bill-footer-actions,
   .printable-bill-wrapper .bill-ugc-warning-banner {
-    display: none !important;
     visibility: hidden !important;
+    display: none !important;
   }
 }
 
 
+
 /* Bouncing Food Loader Loop */
+
 .bouncing-food-loop {
   display: flex;
   gap: 0.75rem;

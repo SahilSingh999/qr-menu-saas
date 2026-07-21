@@ -3811,7 +3811,7 @@ export default function AdminPanel({ mode = 'owner' }) {
               </div>
 
               {/* PRINTABLE QR SHEET — this is what gets printed, everything else is hidden by @media print */}
-              <div className="printable-qr-sheet" style={{ display: 'contents' }}>
+              <div className="printable-qr-sheet">
 
               <div className="stickers-config-card glass-card">
                 <div className="form-group">
