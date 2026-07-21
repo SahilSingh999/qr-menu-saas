@@ -61,9 +61,16 @@ Transitioning the restaurant ordering application into a multi-tenant SaaS archi
 - **Feature 12: Dynamic Table Merging**
   * Designed Waiter-managed table grouping modal to combine arbitrary tables dynamically.
 
+- **Feature 13: Production QR Base Domain & Mobile Scanning Resolution**
+  * Added `qr_domain` (text, default `'https://qr-menu-saas.vercel.app'`) to `cafes` table migration schema.
+  * Implemented configurable "Production QR Base Domain / Public URL Override" in Super Admin Cafe Creation, Cafe Branding settings, and QR Stickers generator.
+  * Added domain formatting helper `formatQrDomain` in `security.js`.
+  * Included quick preset toggles (Live Vercel Production vs Local Dev Server) and a "💾 Save as Default Domain" action in the QR Stickers Manager.
+  * Ensured all generated and printed QR code stickers encode the live production HTTPS URL so iOS & Android mobile devices can scan and place orders directly.
+
 ---
 
-## 🔒 Security Hardening Completed (This Session)
+## 🔒 Security Hardening Completed
 
 - **SHA-256 Web Crypto Authentication**:
   * Created [src/utils/security.js](file:///d:/qr-menu-saas/src/utils/security.js) leveraging standard Web Crypto API (`crypto.subtle.digest('SHA-256')`).
@@ -79,20 +86,11 @@ Transitioning the restaurant ordering application into a multi-tenant SaaS archi
 ## 🚀 Live Vercel Deployment & Git Status
 
 - **Git Branch**: `main`
-- **Latest Commit**: `e398012` (`feat: implement SHA-256 web crypto password security and RLS policies`)
 - **Remote Repo**: [SahilSingh999/qr-menu-saas](https://github.com/SahilSingh999/qr-menu-saas)
 - **Vercel Status**: `Ready 🟢` (Production Deployment Live)
 - **Environment Variables Configured on Vercel**:
   * `VITE_SUPABASE_URL`
   * `VITE_SUPABASE_ANON_KEY`
-
----
-
-## 🐞 Tracked Issue for Next Iteration
-
-| Issue | Description | Planned Fix for Next Session |
-|---|---|---|
-| **QR Code Printing & Scanning Domain Resolution** | When printing QR codes from the local dev server (`http://localhost:5173/admin`), the QR code encodes `http://localhost:5173/table/X`. When scanned on a mobile phone, it prompts to open the Vercel site or fails because `localhost` cannot be resolved on a phone. | Add a **"Production QR Code Domain / Override URL"** input field in Cafe Branding & Super Admin settings (defaulting to live Vercel production URL `https://qr-menu-saas.vercel.app`), so printed QR codes always contain the public production HTTPS domain regardless of whether printed from dev server or production. |
 
 ---
 
@@ -110,7 +108,9 @@ Transitioning the restaurant ordering application into a multi-tenant SaaS archi
 
 | File | What Changed |
 |------|-------------|
-| [src/utils/security.js](file:///d:/qr-menu-saas/src/utils/security.js) | **[NEW]** SHA-256 Web Crypto hashing & safe credential verification |
-| [src/components/AdminPanel.jsx](file:///d:/qr-menu-saas/src/components/AdminPanel.jsx) | Replaced direct plain-text password checks with SHA-256 cryptographic verification |
-| [supabase/migrations/20260720000000_security_rls.sql](file:///d:/qr-menu-saas/supabase/migrations/20260720000000_security_rls.sql) | **[NEW]** Row Level Security (RLS) SQL policies for Supabase |
-| [PROJECT_STATUS.md](file:///d:/qr-menu-saas/PROJECT_STATUS.md) | Documented session security work, live Vercel status, credentials, and tracked QR issue |
+| [supabase/migrations/20260721000000_add_qr_domain.sql](file:///d:/qr-menu-saas/supabase/migrations/20260721000000_add_qr_domain.sql) | **[NEW]** Migration adding `qr_domain` column to `cafes` table |
+| [src/utils/security.js](file:///d:/qr-menu-saas/src/utils/security.js) | Added `formatQrDomain` URL normalization utility |
+| [src/context/SupabaseContext.jsx](file:///d:/qr-menu-saas/src/context/SupabaseContext.jsx) | Handled `qr_domain` field persistence, fallbacks, and local sync |
+| [src/components/AdminPanel.jsx](file:///d:/qr-menu-saas/src/components/AdminPanel.jsx) | Integrated Production QR Base Domain setting across Super Admin Create Cafe, Cafe Branding settings, and QR Stickers generator |
+| [PROJECT_STATUS.md](file:///d:/qr-menu-saas/PROJECT_STATUS.md) | Updated project documentation with Feature 13 details |
+

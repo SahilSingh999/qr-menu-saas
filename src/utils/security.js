@@ -60,3 +60,20 @@ export async function verifyPassword(enteredPassword, storedPassword) {
   const enteredHash = await hashPassword(enteredPassword);
   return enteredHash === storedPassword;
 }
+
+/**
+ * Normalizes and formats a QR base domain string.
+ * Defaults to 'https://qr-menu-saas.vercel.app' if empty or invalid.
+ * @param {string} url 
+ * @returns {string} Formatted domain URL with protocol and no trailing slash
+ */
+export function formatQrDomain(url) {
+  const DEFAULT_DOMAIN = 'https://qr-menu-saas.vercel.app';
+  if (!url || !url.trim()) return DEFAULT_DOMAIN;
+  let trimmed = url.trim().replace(/\/+$/, '');
+  if (!/^https?:\/\//i.test(trimmed)) {
+    trimmed = `https://${trimmed}`;
+  }
+  return trimmed;
+}
+

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSupabase } from '../context/SupabaseContext';
 import { useCurrency } from '../context/CurrencyContext';
-import { verifySuperAdmin, verifyPassword } from '../utils/security';
+import { verifySuperAdmin, verifyPassword, formatQrDomain } from '../utils/security';
 
 export default function AdminPanel({ mode = 'owner' }) {
   const {
@@ -102,7 +102,8 @@ export default function AdminPanel({ mode = 'owner' }) {
   const [cafeFooterMsg, setCafeFooterMsg] = useState('');
   const [cafeFontFamily, setCafeFontFamily] = useState('Outfit');
   const [cafeLogoPlacement, setCafeLogoPlacement] = useState('left_header');
-  const [qrBaseUrl, setQrBaseUrl] = useState(window.location.origin);
+  const [cafeQrDomain, setCafeQrDomain] = useState('https://qr-menu-saas.vercel.app');
+  const [qrBaseUrl, setQrBaseUrl] = useState('https://qr-menu-saas.vercel.app');
 
   // Owner settings and branding states
   const [ownerName, setOwnerName] = useState('');
@@ -118,6 +119,7 @@ export default function AdminPanel({ mode = 'owner' }) {
   const [ownerLogoPlacement, setOwnerLogoPlacement] = useState('left_header');
   const [ownerCurrency, setOwnerCurrency] = useState('USD');
   const [ownerTableCount, setOwnerTableCount] = useState(10);
+  const [ownerQrDomain, setOwnerQrDomain] = useState('https://qr-menu-saas.vercel.app');
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -504,6 +506,9 @@ export default function AdminPanel({ mode = 'owner' }) {
       setOwnerLogoPlacement(selectedCafe.logo_placement || 'left_header');
       setOwnerCurrency(selectedCafe.currency || 'USD');
       setOwnerTableCount(selectedCafe.table_count || 10);
+      const defaultDomain = selectedCafe.qr_domain || 'https://qr-menu-saas.vercel.app';
+      setOwnerQrDomain(defaultDomain);
+      setQrBaseUrl(defaultDomain);
       
       loadMenuItems(selectedCafe.id);
       loadOrders(selectedCafe.id);
@@ -835,7 +840,8 @@ export default function AdminPanel({ mode = 'owner' }) {
       phone: cafePhone,
       footer_message: cafeFooterMsg,
       font_family: cafeFontFamily,
-      logo_placement: cafeLogoPlacement
+      logo_placement: cafeLogoPlacement,
+      qr_domain: formatQrDomain(cafeQrDomain)
     };
 
     const created = await createCafe(newCafe);
@@ -855,6 +861,7 @@ export default function AdminPanel({ mode = 'owner' }) {
       setCafeFooterMsg('');
       setCafeFontFamily('Outfit');
       setCafeLogoPlacement('left_header');
+      setCafeQrDomain('https://qr-menu-saas.vercel.app');
     }
   };
 
@@ -890,7 +897,8 @@ export default function AdminPanel({ mode = 'owner' }) {
       font_family: ownerFontFamily,
       logo_placement: ownerLogoPlacement,
       currency: ownerCurrency,
-      table_count: parseInt(ownerTableCount) || 10
+      table_count: parseInt(ownerTableCount) || 10,
+      qr_domain: formatQrDomain(ownerQrDomain)
     };
 
     const updated = await updateCafe(selectedCafe.id, updates);
@@ -2826,6 +2834,19 @@ export default function AdminPanel({ mode = 'owner' }) {
                   </select>
                 </div>
 
+                <div className="form-group">
+                  <label>Production QR Base Domain / Public URL Override</label>
+                  <input 
+                    type="url" 
+                    placeholder="e.g. https://qr-menu-saas.vercel.app" 
+                    value={cafeQrDomain} 
+                    onChange={(e) => setCafeQrDomain(e.target.value)}
+                  />
+                  <span className="info-tip" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                    Base domain encoded into generated QR code stickers for mobile phone scanning.
+                  </span>
+                </div>
+
                 <button type="submit" className="btn-primary" disabled={loading}>
                   {loading ? 'Creating...' : '✨ Create Cafe'}
                 </button>
@@ -2990,6 +3011,19 @@ export default function AdminPanel({ mode = 'owner' }) {
                       <option value="top_banner">Top Banner (Landscape cover photo)</option>
                       <option value="hidden">Hidden (Text-only header)</option>
                     </select>
+                  </div>
+
+                  <div className="form-group">
+                    <label>Production QR Base Domain / Public URL Override</label>
+                    <input 
+                      type="url" 
+                      placeholder="e.g. https://qr-menu-saas.vercel.app" 
+                      value={ownerQrDomain} 
+                      onChange={(e) => setOwnerQrDomain(e.target.value)}
+                    />
+                    <span className="info-tip" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                      Domain encoded into printed & previewed QR stickers so mobile phones scan directly to your live site.
+                    </span>
                   </div>
 
                   <button type="submit" className="btn-primary" disabled={loading}>
@@ -3748,15 +3782,57 @@ export default function AdminPanel({ mode = 'owner' }) {
                 </div>
                 
                 <div className="form-group" style={{ marginTop: '1rem' }}>
-                  <label>Base URL for QR Codes (Important for testing/deployment):</label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <label style={{ margin: 0 }}>Base URL / Public Domain for QR Codes (Mobile Scanning):</label>
+                    <button
+                      type="button"
+                      className="btn-select"
+                      style={{ fontSize: '0.75rem', padding: '3px 10px', height: '28px', background: 'rgba(16, 185, 129, 0.2)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.4)' }}
+                      onClick={async () => {
+                        const formatted = formatQrDomain(qrBaseUrl);
+                        setQrBaseUrl(formatted);
+                        setOwnerQrDomain(formatted);
+                        const updated = await updateCafe(selectedCafe.id, { qr_domain: formatted });
+                        if (updated) {
+                          setSelectedCafe(updated);
+                          setCafes(prev => prev.map(c => c.id === updated.id ? updated : c));
+                          showAdminAlert('💾 Production QR Base Domain saved as cafe default!');
+                        }
+                      }}
+                    >
+                      💾 Save as Default Domain
+                    </button>
+                  </div>
                   <input 
                     type="text" 
                     value={qrBaseUrl} 
                     onChange={(e) => setQrBaseUrl(e.target.value)} 
-                    placeholder="e.g. https://my-saas.vercel.app or http://192.168.1.x:5173"
+                    placeholder="e.g. https://qr-menu-saas.vercel.app"
                     className="form-input"
                   />
-                  <span className="info-tip" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>If you test on your iPhone, change this to your laptop's Network IP instead of localhost!</span>
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '8px', flexWrap: 'wrap' }}>
+                    <button 
+                      type="button" 
+                      className="btn-select" 
+                      style={{ fontSize: '0.75rem', padding: '4px 10px', background: 'rgba(0, 242, 254, 0.15)', color: '#00f2fe', border: '1px solid rgba(0, 242, 254, 0.3)' }}
+                      onClick={() => {
+                        setQrBaseUrl('https://qr-menu-saas.vercel.app');
+                      }}
+                    >
+                      🌐 Live Vercel Production (https://qr-menu-saas.vercel.app)
+                    </button>
+                    <button 
+                      type="button" 
+                      className="btn-select" 
+                      style={{ fontSize: '0.75rem', padding: '4px 10px', background: 'rgba(255, 255, 255, 0.08)', border: '1px solid rgba(255, 255, 255, 0.15)' }}
+                      onClick={() => setQrBaseUrl(window.location.origin)}
+                    >
+                      💻 Local Dev Server ({window.location.origin})
+                    </button>
+                  </div>
+                  <span className="info-tip" style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block', marginTop: '8px' }}>
+                    📱 Printed sticker QR codes will encode this domain. Mobile phones scan directly to your live production URL.
+                  </span>
                 </div>
               </div>
 
@@ -3764,7 +3840,8 @@ export default function AdminPanel({ mode = 'owner' }) {
               <div className="stickers-print-grid">
                 {Array.from({ length: selectedCafe.table_count || 10 }).map((_, idx) => {
                   const tableNum = idx + 1;
-                  const targetUrl = `${qrBaseUrl}/table/${tableNum}?cafe=${selectedCafe.id}`;
+                  const targetDomain = formatQrDomain(qrBaseUrl);
+                  const targetUrl = `${targetDomain}/table/${tableNum}?cafe=${selectedCafe.id}`;
                   const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(targetUrl)}`;
                   
                   return (

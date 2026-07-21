@@ -35,6 +35,7 @@ export const SupabaseProvider = ({ children }) => {
           if (updates.font_family !== undefined) payload.font_family = updates.font_family;
           if (updates.logo_placement !== undefined) payload.logo_placement = updates.logo_placement;
           if (updates.table_merges !== undefined) payload.table_merges = updates.table_merges;
+          if (updates.qr_domain !== undefined) payload.qr_domain = updates.qr_domain;
 
           if (Object.keys(payload).length > 0) {
             const { error: err } = await supabase
@@ -166,6 +167,9 @@ export const SupabaseProvider = ({ children }) => {
         if (!merged.table_merges) {
           merged.table_merges = [];
         }
+        if (!merged.qr_domain) {
+          merged.qr_domain = 'https://qr-menu-saas.vercel.app';
+        }
         return merged;
       });
     } catch (err) {
@@ -240,7 +244,7 @@ export const SupabaseProvider = ({ children }) => {
       // If database is not migrated yet (missing columns), fall back to stripped payload and local overrides
       if (err && (err.code === '42703' || err.message.includes('column'))) {
         console.warn('New columns missing in cafes table. Inserting cleaned payload and saving local overrides.');
-        const { admin_username, footer_message, font_family, logo_placement, table_merges, ...cleanPayload } = updatedCafePayload;
+        const { admin_username, footer_message, font_family, logo_placement, table_merges, qr_domain, ...cleanPayload } = updatedCafePayload;
         const cleanRes = await supabase.from('cafes').insert([cleanPayload]).select();
         data = cleanRes.data;
         err = cleanRes.error;
@@ -253,7 +257,8 @@ export const SupabaseProvider = ({ children }) => {
             ...(footer_message !== undefined ? { footer_message } : {}),
             ...(font_family !== undefined ? { font_family } : {}),
             ...(logo_placement !== undefined ? { logo_placement } : {}),
-            ...(table_merges !== undefined ? { table_merges } : {})
+            ...(table_merges !== undefined ? { table_merges } : {}),
+            ...(qr_domain !== undefined ? { qr_domain } : {})
           };
           localStorage.setItem('cafes_saas_overrides', JSON.stringify(overrides));
         }
@@ -309,7 +314,7 @@ export const SupabaseProvider = ({ children }) => {
       // If database is not migrated yet (missing columns), fall back to stripped updates and local overrides
       if (err && (err.code === '42703' || err.message.includes('column'))) {
         console.warn('New columns missing in cafes table for update. Updating cleaned payload and saving local overrides.');
-        const { admin_username, footer_message, font_family, logo_placement, table_merges, ...cleanUpdates } = updates;
+        const { admin_username, footer_message, font_family, logo_placement, table_merges, qr_domain, ...cleanUpdates } = updates;
         
         let cleanRes = { data: null, error: null };
         if (Object.keys(cleanUpdates).length > 0) {
@@ -328,7 +333,8 @@ export const SupabaseProvider = ({ children }) => {
             ...(footer_message !== undefined ? { footer_message } : {}),
             ...(font_family !== undefined ? { font_family } : {}),
             ...(logo_placement !== undefined ? { logo_placement } : {}),
-            ...(table_merges !== undefined ? { table_merges } : {})
+            ...(table_merges !== undefined ? { table_merges } : {}),
+            ...(qr_domain !== undefined ? { qr_domain } : {})
           };
           localStorage.setItem('cafes_saas_overrides', JSON.stringify(overrides));
         }
