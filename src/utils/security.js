@@ -68,20 +68,29 @@ export async function verifyPassword(enteredPassword, storedPassword) {
 
 /**
  * Normalizes and formats a QR base domain string.
- * Defaults to 'https://qr-menu-saas.vercel.app' if empty or invalid.
- * @param {string} url 
+ * Auto-detects live production domain from window.location.origin when in a browser context.
+ * Falls back to the Vercel production URL for safe defaults.
+ * @param {string} url - override URL, or empty to use auto-detected domain
  * @returns {string} Formatted domain URL with protocol and no trailing slash
  */
 export function formatQrDomain(url) {
-  const DEFAULT_DOMAIN = 'https://qr-menu-saas.vercel.app';
-  if (!url || !url.trim()) return DEFAULT_DOMAIN;
+  // Auto-detect the live production domain from the current browser context.
+  // This ensures QR codes always encode the real public URL no matter where the app is deployed.
+  const autoDetectedDomain = (typeof window !== 'undefined' && window.location?.origin)
+    ? window.location.origin
+    : 'https://qr-menu-saas-sahilsingh999s-projects.vercel.app';
+
+  if (!url || !url.trim()) return autoDetectedDomain;
   let trimmed = url.trim().replace(/\/+$/, '');
-  
-  // Replace Vercel preview deployment URLs (*-projects.vercel.app) with the official production URL to prevent Vercel Authentication prompts on mobile phones
-  if (trimmed.includes('-projects.vercel.app')) {
-    return DEFAULT_DOMAIN;
+
+  // Strip any subpath routes that may have been accidentally pasted (e.g. /admin, /superadmin)
+  try {
+    const parsed = new URL(trimmed.startsWith('http') ? trimmed : `https://${trimmed}`);
+    trimmed = parsed.origin; // keep only protocol + host, drop any path
+  } catch (_) {
+    // ignore parse errors, fall through
   }
-  
+
   if (!/^https?:\/\//i.test(trimmed)) {
     trimmed = `https://${trimmed}`;
   }

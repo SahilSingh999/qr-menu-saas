@@ -3141,26 +3141,32 @@ footer code {
   line-height: 1.3;
 }
 
-/* Print CSS Media Query override - Crisp Printable QR Stickers & Invoices */
+/* ============================================================
+   BULLETPROOF PRINT ISOLATION
+   - Hides all UI, shows ONLY the dedicated printable container
+   - Works on Chrome, Edge, Safari, iOS, Android print-to-PDF
+   ============================================================ */
 @media print {
-  /* Hide all UI elements that shouldn't be printed */
-  .debug-navbar, 
+  /* STEP 1: Hide absolutely everything in the DOM */
+  body > *,
+  #root > *,
+  .app-container > *,
+  .routing-workspace > *,
+  .admin-panel-container > *,
+  .pane-layout,
+  .pane-left-column,
+  .pane-right-column,
+  .tabs-container,
   .navbar-container,
-  .tabs-container, 
-  .stickers-header-row, 
-  .stickers-config-card,
-  .admin-header-row,
-  .admin-page-header,
-  .btn-primary,
-  .btn-select,
-  .btn-delete-icon,
-  .color-presets-wrapper,
-  .file-upload-wrapper {
+  .blob,
+  .blob-1,
+  .blob-2 {
     display: none !important;
+    visibility: hidden !important;
   }
 
-  /* Reset layout containers to clear backgrounds and prevent white-on-white text */
-  html, body, #root, .app-container, .admin-panel-container, .view-pane-container, .pane-layout, .tab-content, .qr-stickers-manager {
+  /* STEP 2: Force full-page white canvas */
+  html, body, #root {
     background: #ffffff !important;
     color: #000000 !important;
     height: auto !important;
@@ -3170,36 +3176,52 @@ footer code {
     margin: 0 !important;
     box-shadow: none !important;
     border: none !important;
-    display: block !important;
     backdrop-filter: none !important;
   }
 
-  /* Ensure card backgrounds and text are dark on paper */
-  .glass-card, .table-sticker-card, .bill-receipt-modal, .bill-paper {
+  /* STEP 3: Reveal ONLY the printable content containers */
+  .printable-qr-sheet,
+  .printable-bill-wrapper {
+    display: block !important;
+    visibility: visible !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 100vh !important;
     background: #ffffff !important;
     color: #000000 !important;
-    box-shadow: none !important;
-    backdrop-filter: none !important;
+    z-index: 99999 !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    margin: 0 !important;
   }
 
-  .glass-card *, .table-sticker-card *, .bill-receipt-modal *, .bill-paper * {
+  /* Ensure ALL descendants of printable containers are visible */
+  .printable-qr-sheet *,
+  .printable-bill-wrapper * {
+    visibility: visible !important;
     color: #000000 !important;
+    background: transparent !important;
+    box-shadow: none !important;
     text-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
   }
 
-  /* Format the grid for the printed sticker sheet */
+  /* STEP 4: QR Sticker Grid Layout */
   .stickers-print-grid {
     display: grid !important;
     grid-template-columns: repeat(3, 1fr) !important;
     gap: 0.8cm !important;
     width: 100% !important;
-    position: static !important;
-    padding: 0.5cm !important;
+    padding: 0.8cm !important;
     background: #ffffff !important;
   }
 
   .table-sticker-card {
-    border: 2px solid #333333 !important;
+    border: 2px solid #222222 !important;
     border-radius: 12px !important;
     padding: 1.2rem 1rem !important;
     break-inside: avoid !important;
@@ -3207,13 +3229,25 @@ footer code {
     background: #ffffff !important;
     color: #000000 !important;
     text-align: center !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    gap: 0.4rem !important;
   }
 
-  .sticker-brand h4, 
-  .sticker-footer h2, 
-  .table-badge-label, 
-  .sticker-scan-instruction {
+  .sticker-brand img {
+    width: 48px !important;
+    height: 48px !important;
+    object-fit: contain !important;
+    border-radius: 8px !important;
+    border: 1px solid #ccc !important;
+  }
+
+  .sticker-brand h4 {
+    font-size: 0.85rem !important;
+    font-weight: 700 !important;
     color: #000000 !important;
+    margin: 4px 0 !important;
   }
 
   .sticker-qr-img {
@@ -3222,7 +3256,64 @@ footer code {
     display: block !important;
     margin: 0.5rem auto !important;
   }
+
+  .table-badge-label {
+    font-size: 0.65rem !important;
+    font-weight: 800 !important;
+    letter-spacing: 3px !important;
+    color: #555555 !important;
+    text-transform: uppercase !important;
+  }
+
+  .sticker-footer h2 {
+    font-size: 2rem !important;
+    font-weight: 900 !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    line-height: 1 !important;
+  }
+
+  .sticker-scan-instruction {
+    font-size: 0.68rem !important;
+    color: #444444 !important;
+    text-align: center !important;
+  }
+
+  /* STEP 5: Bill receipt */
+  .printable-bill-wrapper .bill-header h1 {
+    font-size: 1.4rem !important;
+    font-weight: 800 !important;
+    color: #000000 !important;
+    text-align: center !important;
+  }
+
+  .printable-bill-wrapper .bill-table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+
+  .printable-bill-wrapper .bill-table th,
+  .printable-bill-wrapper .bill-table td {
+    border: 1px solid #aaaaaa !important;
+    padding: 6px 8px !important;
+    color: #000000 !important;
+    font-size: 0.85rem !important;
+  }
+
+  .printable-bill-wrapper .bill-table th {
+    background: #eeeeee !important;
+    font-weight: 700 !important;
+  }
+
+  /* Hide print-time-irrelevant elements inside bill */
+  .printable-bill-wrapper .bill-modal-overlay,
+  .printable-bill-wrapper .bill-footer-actions,
+  .printable-bill-wrapper .bill-ugc-warning-banner {
+    display: none !important;
+    visibility: hidden !important;
+  }
 }
+
 
 /* Bouncing Food Loader Loop */
 .bouncing-food-loop {

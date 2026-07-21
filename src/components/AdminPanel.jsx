@@ -3183,31 +3183,83 @@ export default function AdminPanel({ mode = 'owner' }) {
                         )}
 
                         {isSuperAdminSession && (
-                          deleteCafeConfirmId === cafe.id ? (
-                            <div className="inline-confirm-row">
-                              <button 
-                                className="btn-confirm-yes"
-                                onClick={() => handleDeleteCafe(cafe.id)}
-                                title="Confirm deleting this cafe"
-                              >
-                                🗑️ Confirm?
-                              </button>
-                              <button 
-                                className="btn-confirm-no"
-                                onClick={() => setDeleteCafeConfirmId(null)}
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          ) : (
-                            <button 
-                              className="btn-delete-icon"
-                              onClick={() => handleDeleteCafe(cafe.id)}
-                              title="Delete Cafe"
+                          <>  
+                            {/* WhatsApp Credential Sharing */}
+                            <button
+                              type="button"
+                              className="btn-select"
+                              title="Share credentials via WhatsApp"
+                              style={{ background: 'rgba(37, 211, 102, 0.12)', color: '#25d366', border: '1px solid rgba(37, 211, 102, 0.25)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                              onClick={() => {
+                                const liveUrl = window.location.origin;
+                                const msg = [
+                                  `🏢 *QR Menu SaaS — Branch Credentials*`,
+                                  `Branch: *${cafe.name}*`,
+                                  cafe.location ? `📍 Location: ${cafe.location}` : '',
+                                  ``,
+                                  `🔑 Activation Key: \`${cafe.activation_key || 'N/A'}\``,
+                                  `👤 Admin Username: \`${cafe.admin_username || cafe.name?.toLowerCase().replace(/\s+/g, '') || 'N/A'}\``,
+                                  `🔒 Admin Password: \`${cafe.admin_password || '(contact SaaS admin)'}\``,
+                                  ``,
+                                  `🌐 Admin Portal: ${liveUrl}/admin`,
+                                  `📱 Customer Menu (Table 1): ${liveUrl}/table/1?cafe=${cafe.id}`,
+                                ].filter(Boolean).join('\n');
+                                window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
+                              }}
                             >
-                              🗑️
+                              📲 WhatsApp
                             </button>
-                          )
+
+                            {/* Copy All Credentials */}
+                            <button
+                              type="button"
+                              className="btn-select"
+                              title="Copy all credentials to clipboard"
+                              style={{ background: 'rgba(99, 102, 241, 0.12)', color: '#818cf8', border: '1px solid rgba(99, 102, 241, 0.25)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                              onClick={() => {
+                                const liveUrl = window.location.origin;
+                                const text = [
+                                  `Branch: ${cafe.name}`,
+                                  `Activation Key: ${cafe.activation_key || 'N/A'}`,
+                                  `Admin Username: ${cafe.admin_username || cafe.name?.toLowerCase().replace(/\s+/g, '') || 'N/A'}`,
+                                  `Admin Password: ${cafe.admin_password || '(contact SaaS admin)'}`,
+                                  `Admin Portal: ${liveUrl}/admin`,
+                                  `Customer Menu (Table 1): ${liveUrl}/table/1?cafe=${cafe.id}`,
+                                ].join('\n');
+                                navigator.clipboard.writeText(text);
+                                showAdminAlert('📋 All credentials copied to clipboard!');
+                              }}
+                            >
+                              📋 Copy Creds
+                            </button>
+
+                            {/* Delete cafe */}
+                            {deleteCafeConfirmId === cafe.id ? (
+                              <div className="inline-confirm-row">
+                                <button 
+                                  className="btn-confirm-yes"
+                                  onClick={() => handleDeleteCafe(cafe.id)}
+                                  title="Confirm deleting this cafe"
+                                >
+                                  🗑️ Confirm?
+                                </button>
+                                <button 
+                                  className="btn-confirm-no"
+                                  onClick={() => setDeleteCafeConfirmId(null)}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            ) : (
+                              <button 
+                                className="btn-delete-icon"
+                                onClick={() => handleDeleteCafe(cafe.id)}
+                                title="Delete Cafe"
+                              >
+                                🗑️
+                              </button>
+                            )}
+                          </>
                         )}
                       </div>
                     </div>
@@ -3758,6 +3810,9 @@ export default function AdminPanel({ mode = 'owner' }) {
                 </button>
               </div>
 
+              {/* PRINTABLE QR SHEET — this is what gets printed, everything else is hidden by @media print */}
+              <div className="printable-qr-sheet" style={{ display: 'contents' }}>
+
               <div className="stickers-config-card glass-card">
                 <div className="form-group">
                   <label>Change Tables Count for this Cafe:</label>
@@ -3816,18 +3871,18 @@ export default function AdminPanel({ mode = 'owner' }) {
                       className="btn-select" 
                       style={{ fontSize: '0.75rem', padding: '4px 10px', background: 'rgba(0, 242, 254, 0.15)', color: '#00f2fe', border: '1px solid rgba(0, 242, 254, 0.3)' }}
                       onClick={() => {
-                        setQrBaseUrl('https://qr-menu-saas.vercel.app');
+                        setQrBaseUrl(window.location.origin);
                       }}
                     >
-                      🌐 Live Vercel Production (https://qr-menu-saas.vercel.app)
+                      🌐 Use Current Live Domain ({window.location.origin})
                     </button>
                     <button 
                       type="button" 
                       className="btn-select" 
                       style={{ fontSize: '0.75rem', padding: '4px 10px', background: 'rgba(255, 255, 255, 0.08)', border: '1px solid rgba(255, 255, 255, 0.15)' }}
-                      onClick={() => setQrBaseUrl(window.location.origin)}
+                      onClick={() => setQrBaseUrl('http://localhost:5173')}
                     >
-                      💻 Local Dev Server ({window.location.origin})
+                      💻 Local Dev Server (http://localhost:5173)
                     </button>
                   </div>
                   <span className="info-tip" style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block', marginTop: '8px' }}>
@@ -3836,7 +3891,7 @@ export default function AdminPanel({ mode = 'owner' }) {
                 </div>
               </div>
 
-              {/* Printable Stickers Sheet Grid */}
+              {/* Printable Stickers Sheet Grid — wrapped in .printable-qr-sheet for print isolation */}
               <div className="stickers-print-grid">
                 {Array.from({ length: selectedCafe.table_count || 10 }).map((_, idx) => {
                   const tableNum = idx + 1;
@@ -3868,6 +3923,8 @@ export default function AdminPanel({ mode = 'owner' }) {
                     </div>
                   );
                 })}
+              </div>
+              {/* End printable-qr-sheet */}
               </div>
             </div>
           )
