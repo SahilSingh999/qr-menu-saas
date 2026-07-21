@@ -3805,13 +3805,73 @@ export default function AdminPanel({ mode = 'owner' }) {
                   <h2>🖨️ QR Code Stickers Generator</h2>
                   <p>Generate print-ready sticker sheets for physical tables at <strong>{selectedCafe.name}</strong>.</p>
                 </div>
-                <button className="btn-primary btn-print-sheet" onClick={() => window.print()}>
+                <button
+                  className="btn-primary"
+                  style={{ background: 'linear-gradient(135deg, #10b981, #059669)', minWidth: '180px' }}
+                  onClick={() => {
+                    const targetDomain = formatQrDomain(qrBaseUrl);
+                    const tableCount = selectedCafe.table_count || 10;
+                    const logoUrl = selectedCafe.logo_url || 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=150&auto=format&fit=crop&q=60';
+                    const cafeName = selectedCafe.name || 'Cafe';
+
+                    // Build sticker cards HTML with fully inline styles
+                    const cards = Array.from({ length: tableCount }, (_, idx) => {
+                      const tableNum = idx + 1;
+                      const targetUrl = `${targetDomain}/table/${tableNum}?cafe=${selectedCafe.id}`;
+                      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&margin=10&data=${encodeURIComponent(targetUrl)}`;
+                      return `
+                        <div style="border:2px solid #222;border-radius:14px;padding:18px 14px;background:#fff;text-align:center;display:flex;flex-direction:column;align-items:center;gap:8px;break-inside:avoid;page-break-inside:avoid;">
+                          <img src="${logoUrl}" alt="logo" style="width:52px;height:52px;object-fit:contain;border-radius:8px;border:1px solid #ddd;" onerror="this.style.display='none'" />
+                          <div style="font-size:13px;font-weight:700;color:#111;margin:2px 0;">${cafeName}</div>
+                          <img src="${qrUrl}" alt="QR Table ${tableNum}" style="width:160px;height:160px;display:block;margin:4px auto;" />
+                          <div style="font-size:10px;font-weight:800;letter-spacing:3px;color:#555;text-transform:uppercase;margin-top:4px;">TABLE</div>
+                          <div style="font-size:36px;font-weight:900;color:#111;line-height:1;margin:0;">${tableNum}</div>
+                          <div style="font-size:10px;color:#444;margin-top:2px;">Scan to order &amp; play retro games!</div>
+                        </div>`;
+                    }).join('');
+
+                    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8"/>
+  <title>${cafeName} — QR Table Stickers</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #fff; font-family: 'Segoe UI', Arial, sans-serif; padding: 16px; }
+    h1 { font-size: 18px; color: #111; margin-bottom: 4px; }
+    p  { font-size: 12px; color: #555; margin-bottom: 16px; }
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+    @media print {
+      body { padding: 8px; }
+      @page { margin: 1cm; }
+    }
+  </style>
+</head>
+<body>
+  <h1>🖨️ QR Sticker Sheet — ${cafeName}</h1>
+  <p>Scan any QR code to go directly to the table's menu. Domain: ${targetDomain}</p>
+  <div class="grid">${cards}</div>
+  <script>
+    // Auto-print once all images are loaded
+    window.onload = function() {
+      setTimeout(function() { window.print(); }, 800);
+    };
+  <\/script>
+</body>
+</html>`;
+
+                    const win = window.open('', '_blank', 'width=900,height=700');
+                    if (win) {
+                      win.document.write(html);
+                      win.document.close();
+                    } else {
+                      showAdminAlert('⚠️ Pop-up blocked! Please allow pop-ups for this site, then try again.');
+                    }
+                  }}
+                >
                   🖨️ Print Stickers Sheet
                 </button>
               </div>
-
-              {/* PRINTABLE QR SHEET — this is what gets printed, everything else is hidden by @media print */}
-              <div className="printable-qr-sheet">
 
               <div className="stickers-config-card glass-card">
                 <div className="form-group">
@@ -3862,7 +3922,7 @@ export default function AdminPanel({ mode = 'owner' }) {
                     type="text" 
                     value={qrBaseUrl} 
                     onChange={(e) => setQrBaseUrl(e.target.value)} 
-                    placeholder="e.g. https://qr-menu-saas.vercel.app"
+                    placeholder="e.g. https://your-domain.vercel.app"
                     className="form-input"
                   />
                   <div style={{ display: 'flex', gap: '8px', marginTop: '8px', flexWrap: 'wrap' }}>
@@ -3870,9 +3930,7 @@ export default function AdminPanel({ mode = 'owner' }) {
                       type="button" 
                       className="btn-select" 
                       style={{ fontSize: '0.75rem', padding: '4px 10px', background: 'rgba(0, 242, 254, 0.15)', color: '#00f2fe', border: '1px solid rgba(0, 242, 254, 0.3)' }}
-                      onClick={() => {
-                        setQrBaseUrl(window.location.origin);
-                      }}
+                      onClick={() => setQrBaseUrl(window.location.origin)}
                     >
                       🌐 Use Current Live Domain ({window.location.origin})
                     </button>
@@ -3891,7 +3949,7 @@ export default function AdminPanel({ mode = 'owner' }) {
                 </div>
               </div>
 
-              {/* Printable Stickers Sheet Grid — wrapped in .printable-qr-sheet for print isolation */}
+              {/* Live Preview of Sticker Cards */}
               <div className="stickers-print-grid">
                 {Array.from({ length: selectedCafe.table_count || 10 }).map((_, idx) => {
                   const tableNum = idx + 1;
@@ -3918,13 +3976,11 @@ export default function AdminPanel({ mode = 'owner' }) {
                       <div className="sticker-footer">
                         <span className="table-badge-label">TABLE</span>
                         <h2>{tableNum}</h2>
-                        <span className="sticker-scan-instruction">Scan to order dishes & play retro games!</span>
+                        <span className="sticker-scan-instruction">Scan to order dishes &amp; play retro games!</span>
                       </div>
                     </div>
                   );
                 })}
-              </div>
-              {/* End printable-qr-sheet */}
               </div>
             </div>
           )
@@ -3932,6 +3988,7 @@ export default function AdminPanel({ mode = 'owner' }) {
 
         {/* ORDERS TAB */}
         {activeTab === 'orders' && (
+
           !selectedCafe ? (
             <div className="alert-select-cafe glass-card">
               <p>⚠️ Please create or select a cafe from the Cafes tab to simulate order actions.</p>
