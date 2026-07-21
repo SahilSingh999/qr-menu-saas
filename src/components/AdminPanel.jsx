@@ -102,8 +102,10 @@ export default function AdminPanel({ mode = 'owner' }) {
   const [cafeFooterMsg, setCafeFooterMsg] = useState('');
   const [cafeFontFamily, setCafeFontFamily] = useState('Outfit');
   const [cafeLogoPlacement, setCafeLogoPlacement] = useState('left_header');
-  const [cafeQrDomain, setCafeQrDomain] = useState('https://qr-menu-saas.vercel.app');
-  const [qrBaseUrl, setQrBaseUrl] = useState('https://qr-menu-saas.vercel.app');
+  // Auto-detect the live domain so QR codes always encode the correct public URL
+  const [cafeQrDomain, setCafeQrDomain] = useState(() => typeof window !== 'undefined' ? window.location.origin : '');
+  const [qrBaseUrl, setQrBaseUrl] = useState(() => typeof window !== 'undefined' ? window.location.origin : '');
+
 
   // Owner settings and branding states
   const [ownerName, setOwnerName] = useState('');
@@ -506,7 +508,7 @@ export default function AdminPanel({ mode = 'owner' }) {
       setOwnerLogoPlacement(selectedCafe.logo_placement || 'left_header');
       setOwnerCurrency(selectedCafe.currency || 'USD');
       setOwnerTableCount(selectedCafe.table_count || 10);
-      const defaultDomain = selectedCafe.qr_domain || 'https://qr-menu-saas.vercel.app';
+      const defaultDomain = selectedCafe.qr_domain || window.location.origin;
       setOwnerQrDomain(defaultDomain);
       setQrBaseUrl(defaultDomain);
       
