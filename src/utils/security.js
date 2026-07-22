@@ -78,10 +78,15 @@ export function formatQrDomain(url) {
   // This ensures QR codes always encode the real public URL no matter where the app is deployed.
   const autoDetectedDomain = (typeof window !== 'undefined' && window.location?.origin)
     ? window.location.origin
-    : 'https://qr-menu-saas-sahilsingh999s-projects.vercel.app';
+    : 'https://qr-menu-saas-dun.vercel.app';
 
   if (!url || !url.trim()) return autoDetectedDomain;
   let trimmed = url.trim().replace(/\/+$/, '');
+
+  // CRITICAL FIX: If passed URL points to the dead/wrong project "qr-menu-saas.vercel.app" (without -dun), override with live domain
+  if (trimmed.includes('qr-menu-saas.vercel.app') && !trimmed.includes('qr-menu-saas-dun.vercel.app')) {
+    return autoDetectedDomain;
+  }
 
   // Strip any subpath routes that may have been accidentally pasted (e.g. /admin, /superadmin)
   try {

@@ -6,9 +6,9 @@ ALTER TABLE cafes ADD COLUMN IF NOT EXISTS footer_message TEXT;
 ALTER TABLE cafes ADD COLUMN IF NOT EXISTS font_family TEXT DEFAULT 'Outfit';
 ALTER TABLE cafes ADD COLUMN IF NOT EXISTS logo_placement TEXT DEFAULT 'left_header';
 ALTER TABLE cafes ADD COLUMN IF NOT EXISTS table_merges JSONB DEFAULT '[]'::jsonb;
-ALTER TABLE cafes ADD COLUMN IF NOT EXISTS qr_domain TEXT DEFAULT 'https://qr-menu-saas.vercel.app';
+ALTER TABLE cafes ADD COLUMN IF NOT EXISTS qr_domain TEXT DEFAULT 'https://qr-menu-saas-dun.vercel.app';
 
 -- Assign default usernames for existing cafes
 UPDATE cafes SET admin_username = 'sscafe' WHERE (name LIKE '%SS CAFE%' OR name LIKE '%ss cafe%') AND (admin_username IS NULL OR admin_username = '');
 UPDATE cafes SET admin_username = 'trackside' WHERE name LIKE '%TrackSide%' AND (admin_username IS NULL OR admin_username = '');
-UPDATE cafes SET qr_domain = 'https://qr-menu-saas.vercel.app' WHERE qr_domain IS NULL OR qr_domain = '';
+UPDATE cafes SET qr_domain = 'https://qr-menu-saas-dun.vercel.app' WHERE qr_domain IS NULL OR qr_domain = '' OR qr_domain LIKE '%qr-menu-saas.vercel.app%';

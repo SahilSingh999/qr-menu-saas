@@ -168,7 +168,7 @@ export const SupabaseProvider = ({ children }) => {
           merged.table_merges = [];
         }
         if (!merged.qr_domain) {
-          merged.qr_domain = 'https://qr-menu-saas.vercel.app';
+          merged.qr_domain = typeof window !== 'undefined' ? window.location.origin : 'https://qr-menu-saas-dun.vercel.app';
         }
         return merged;
       });
