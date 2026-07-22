@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useSupabase } from '../context/SupabaseContext';
 import { useCurrency } from '../context/CurrencyContext';
 import { PrintBillModal } from './AdminPanel';
+import { soundAlerts } from '../utils/soundAlerts';
 
 export default function WaiterDashboard() {
   const {
@@ -14,7 +15,10 @@ export default function WaiterDashboard() {
     updateCafe,
     subscribeToOrders,
     fetchStaff,
-    fetchMenuItems
+    fetchMenuItems,
+    fetchWaiterCalls,
+    updateWaiterCallStatus,
+    subscribeToWaiterCalls
   } = useSupabase();
 
   const { formatPrice, setCurrencyCode } = useCurrency();
@@ -23,6 +27,7 @@ export default function WaiterDashboard() {
   const [menuItems, setMenuItems] = useState([]);
   const [selectedOrderForBill, setSelectedOrderForBill] = useState(null);
   const [isCafeLocked, setIsCafeLocked] = useState(false);
+  const [waiterCalls, setWaiterCalls] = useState([]);
 
   // Raw Inventory states for Waiter view
   const [rawIngredients, setRawIngredients] = useState([]);
@@ -296,13 +301,13 @@ export default function WaiterDashboard() {
           });
           if (payload.new.status === 'assistance_needed') {
             if (!isAudioMuted) {
-              playAssistanceBuzz();
+              soundAlerts.playWaiterChime();
               speakNotification(`Table number ${payload.new.table_number || 'unknown'} requested assistance`);
             }
             showToast(`🛎️ Table ${payload.new.table_number || 'N/A'} requested assistance!`, 'error');
           } else {
             if (!isAudioMuted) {
-              playNewOrderChime();
+              soundAlerts.playOrderBell();
               speakNotification(`Table number ${payload.new.table_number || 'unknown'} placed order`);
             }
             showToast(`🔥 Table ${payload.new.table_number || 'N/A'} has placed a new order!`, 'success');
@@ -314,8 +319,25 @@ export default function WaiterDashboard() {
         }
       });
 
+      // Subscribe to real-time waiter calls
+      let unsubWaiter;
+      if (subscribeToWaiterCalls) {
+        unsubWaiter = subscribeToWaiterCalls(selectedCafe.id, (payload) => {
+          if (payload.eventType === 'WAITER_CALL_INSERT') {
+            if (!isAudioMuted) {
+              soundAlerts.playWaiterChime();
+            }
+            setWaiterCalls(prev => [payload.new, ...prev.filter(c => String(c.id) !== String(payload.new.id))]);
+            showToast(`🛎️ Waiter Call: Table #${payload.new.table_number} (${payload.new.reason || 'Assistance'})`, 'error');
+          } else if (payload.eventType === 'WAITER_CALL_UPDATE') {
+            setWaiterCalls(prev => prev.map(c => String(c.id) === String(payload.new.id) ? payload.new : c));
+          }
+        });
+      }
+
       return () => {
         if (unsubscribe) unsubscribe();
+        if (unsubWaiter) unsubWaiter();
       };
     } else {
       setOrders([]);

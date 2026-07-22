@@ -175,15 +175,15 @@ const SnakeGame = ({ themeColor }) => {
 
       <div className="mobile-controls">
         <div className="control-row">
-          <button className="control-btn" onClick={() => handleDirectionChange({ x: 0, y: -1 })}>▲</button>
+          <button className="control-btn" aria-label="Move Up" onClick={() => handleDirectionChange({ x: 0, y: -1 })}>▲</button>
         </div>
         <div className="control-row">
-          <button className="control-btn" onClick={() => handleDirectionChange({ x: -1, y: 0 })}>◀</button>
-          <button className="control-btn empty-center"></button>
-          <button className="control-btn" onClick={() => handleDirectionChange({ x: 1, y: 0 })}>▶</button>
+          <button className="control-btn" aria-label="Move Left" onClick={() => handleDirectionChange({ x: -1, y: 0 })}>◀</button>
+          <button className="control-btn empty-center" aria-hidden="true"></button>
+          <button className="control-btn" aria-label="Move Right" onClick={() => handleDirectionChange({ x: 1, y: 0 })}>▶</button>
         </div>
         <div className="control-row">
-          <button className="control-btn" onClick={() => handleDirectionChange({ x: 0, y: 1 })}>▼</button>
+          <button className="control-btn" aria-label="Move Down" onClick={() => handleDirectionChange({ x: 0, y: 1 })}>▼</button>
         </div>
       </div>
       <p className="controls-tip">Control with keyboard arrow keys or touch buttons!</p>
@@ -908,7 +908,8 @@ export default function CustomerView() {
     createOrder,
     uploadImage,
     updateOrder,
-    updateMenuItem
+    updateMenuItem,
+    createWaiterCall
   } = useSupabase();
 
   const { formatPrice, setCurrencyCode } = useCurrency();
@@ -1310,6 +1311,13 @@ export default function CustomerView() {
     if (isBuzzerActive) return;
     setIsBuzzerActive(true);
     try {
+      if (createWaiterCall) {
+        await createWaiterCall({
+          cafe_id: parseInt(cafe?.id || cafeId),
+          table_number: parseInt(resolvedTableId || '1'),
+          reason: 'Table needs waiter assistance'
+        });
+      }
       const buzzerOrder = {
         cafe_id: parseInt(cafe?.id || cafeId),
         table_number: resolvedTableId || 'General',
@@ -1344,6 +1352,7 @@ export default function CustomerView() {
       }
     } catch (e) {
       console.error(e);
+      setIsBuzzerActive(false);
     }
   };
 

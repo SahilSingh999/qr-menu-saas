@@ -1319,6 +1319,184 @@ export const SupabaseProvider = ({ children }) => {
     };
   };
 
+  // Waiter Calls CRUD & Realtime Subscription (Feature 20)
+  const fetchWaiterCalls = async (cafeId = null) => {
+    setLoading(true);
+    setError(null);
+    try {
+      let query = supabase.from('waiter_calls').select('*');
+      if (cafeId) {
+        query = query.eq('cafe_id', cafeId);
+      }
+      const { data, error: err } = await query.order('created_at', { ascending: false });
+      if (err) {
+        if (err.code === 'PGRST205' || err.message.includes('relation "waiter_calls" does not exist')) {
+          console.warn('waiter_calls table not found. Falling back to LocalStorage.');
+          let list = getMockData('waiter_calls');
+          if (cafeId) {
+            list = list.filter(c => String(c.cafe_id) === String(cafeId));
+          }
+          return list.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        }
+        throw err;
+      }
+      return data;
+    } catch (err) {
+      console.warn('fetchWaiterCalls fallback to LocalStorage:', err);
+      let list = getMockData('waiter_calls');
+      if (cafeId) {
+        list = list.filter(c => String(c.cafe_id) === String(cafeId));
+      }
+      return list.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const createWaiterCall = async (waiterCall) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const payload = {
+        ...waiterCall,
+        status: waiterCall.status || 'pending',
+        created_at: new Date().toISOString()
+      };
+      const { data, error: err } = await supabase
+        .from('waiter_calls')
+        .insert([payload])
+        .select();
+
+      let createdCall = null;
+      if (err) {
+        console.warn('createWaiterCall fallback to LocalStorage:', err.message);
+        const list = getMockData('waiter_calls');
+        createdCall = { id: Date.now(), ...payload };
+        list.push(createdCall);
+        setMockData('waiter_calls', list);
+      } else {
+        createdCall = data[0];
+      }
+
+      realtimeBroadcast.postMessage({
+        eventType: 'WAITER_CALL_INSERT',
+        new: createdCall,
+        old: {}
+      });
+
+      return createdCall;
+    } catch (err) {
+      console.warn('createWaiterCall exception, fallback to LocalStorage:', err);
+      const list = getMockData('waiter_calls');
+      const createdCall = { id: Date.now(), ...waiterCall, status: waiterCall.status || 'pending', created_at: new Date().toISOString() };
+      list.push(createdCall);
+      setMockData('waiter_calls', list);
+
+      realtimeBroadcast.postMessage({
+        eventType: 'WAITER_CALL_INSERT',
+        new: createdCall,
+        old: {}
+      });
+
+      return createdCall;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateWaiterCallStatus = async (id, status) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data, error: err } = await supabase
+        .from('waiter_calls')
+        .update({ status })
+        .eq('id', id)
+        .select();
+
+      let updatedCall = null;
+      if (err) {
+        console.warn('updateWaiterCallStatus fallback to LocalStorage:', err.message);
+        const list = getMockData('waiter_calls');
+        const updated = list.map(c => String(c.id) === String(id) ? { ...c, status } : c);
+        setMockData('waiter_calls', updated);
+        updatedCall = updated.find(c => String(c.id) === String(id));
+      } else {
+        updatedCall = data[0];
+      }
+
+      if (updatedCall) {
+        realtimeBroadcast.postMessage({
+          eventType: 'WAITER_CALL_UPDATE',
+          new: updatedCall,
+          old: { id }
+        });
+      }
+      return updatedCall;
+    } catch (err) {
+      console.warn('updateWaiterCallStatus exception fallback:', err);
+      const list = getMockData('waiter_calls');
+      const updated = list.map(c => String(c.id) === String(id) ? { ...c, status } : c);
+      setMockData('waiter_calls', updated);
+      const updatedCall = updated.find(c => String(c.id) === String(id));
+
+      if (updatedCall) {
+        realtimeBroadcast.postMessage({
+          eventType: 'WAITER_CALL_UPDATE',
+          new: updatedCall,
+          old: { id }
+        });
+      }
+      return updatedCall;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const subscribeToWaiterCalls = (cafeId, onEvent) => {
+    let channel;
+    let filter = cafeId ? `cafe_id=eq.${cafeId}` : undefined;
+
+    try {
+      channel = supabase
+        .channel('waiter-calls-realtime-channel')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'waiter_calls',
+            ...(filter ? { filter } : {})
+          },
+          (payload) => {
+            onEvent(payload);
+          }
+        )
+        .subscribe();
+    } catch {
+      console.warn("Supabase Realtime not available for waiter calls.");
+    }
+
+    const handleBroadcastMessage = (e) => {
+      const payload = e.data;
+      if (payload.eventType && payload.eventType.startsWith('WAITER_CALL_')) {
+        if (cafeId && payload.new && String(payload.new.cafe_id) !== String(cafeId)) {
+          return;
+        }
+        onEvent(payload);
+      }
+    };
+
+    realtimeBroadcast.addEventListener('message', handleBroadcastMessage);
+
+    return () => {
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
+      realtimeBroadcast.removeEventListener('message', handleBroadcastMessage);
+    };
+  };
+
   const compressImage = (file, maxDimension = 1000, quality = 0.75) => {
     return new Promise((resolve) => {
       if (!file || !file.type || !file.type.startsWith('image/')) {
@@ -1470,7 +1648,11 @@ export const SupabaseProvider = ({ children }) => {
     validateActivationKey,
     fetchCafeByUsername,
     fetchCafeById,
-    verifyRecoveryKey
+    verifyRecoveryKey,
+    fetchWaiterCalls,
+    createWaiterCall,
+    updateWaiterCallStatus,
+    subscribeToWaiterCalls
   };
 
   return (

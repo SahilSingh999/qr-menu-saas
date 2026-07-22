@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useSupabase } from '../context/SupabaseContext';
 import { useCurrency } from '../context/CurrencyContext';
 import { verifySuperAdmin, verifyPassword, formatQrDomain } from '../utils/security';
+import { soundAlerts } from '../utils/soundAlerts';
 
 export default function AdminPanel({ mode = 'owner' }) {
   const {
@@ -29,7 +30,10 @@ export default function AdminPanel({ mode = 'owner' }) {
     validateActivationKey,
     fetchCafeByUsername,
     fetchCafeById,
-    verifyRecoveryKey
+    verifyRecoveryKey,
+    fetchWaiterCalls,
+    updateWaiterCallStatus,
+    subscribeToWaiterCalls
   } = useSupabase();
 
   // State
@@ -88,6 +92,11 @@ export default function AdminPanel({ mode = 'owner' }) {
   const displayedCafes = adminSession ? cafes.filter(c => c.id === adminSession) : cafes;
   const [menuItems, setMenuItems] = useState([]);
   const [orders, setOrders] = useState([]);
+
+  // Analytics & Realtime Features (Features 18, 19, 20)
+  const [analyticsTimeRange, setAnalyticsTimeRange] = useState('7d'); // 'today' | '7d' | '30d' | 'all'
+  const [waiterCalls, setWaiterCalls] = useState([]);
+  const [isAudioMuted, setIsAudioMuted] = useState(() => soundAlerts.isMuted);
 
   // Form States - Cafes
   const [cafeName, setCafeName] = useState('');
@@ -516,10 +525,12 @@ export default function AdminPanel({ mode = 'owner' }) {
       
       loadMenuItems(selectedCafe.id);
       loadOrders(selectedCafe.id);
+      loadWaiterCallsData(selectedCafe.id);
 
       // Subscribe to realtime orders for the selected cafe
       const unsubscribe = subscribeToOrders(selectedCafe.id, (payload) => {
         if (payload.eventType === 'INSERT') {
+          soundAlerts.playOrderBell();
           setOrders(prev => {
             if (prev.some(order => String(order.id) === String(payload.new.id))) {
               return prev;
@@ -533,16 +544,32 @@ export default function AdminPanel({ mode = 'owner' }) {
         }
       });
 
+      // Subscribe to realtime waiter calls
+      let unsubWaiter;
+      if (subscribeToWaiterCalls) {
+        unsubWaiter = subscribeToWaiterCalls(selectedCafe.id, (payload) => {
+          if (payload.eventType === 'WAITER_CALL_INSERT') {
+            soundAlerts.playWaiterChime();
+            setWaiterCalls(prev => [payload.new, ...prev.filter(c => String(c.id) !== String(payload.new.id))]);
+          } else if (payload.eventType === 'WAITER_CALL_UPDATE') {
+            setWaiterCalls(prev => prev.map(c => String(c.id) === String(payload.new.id) ? payload.new : c));
+          }
+        });
+      }
+
       return () => {
         if (unsubscribe) unsubscribe();
+        if (unsubWaiter) unsubWaiter();
       };
     } else if (isSuperAdminSession) {
       // In Super Admin session: Load ALL orders for platform-wide metrics & logs
       loadOrders(null);
+      loadWaiterCallsData(null);
 
       // Subscribe to ALL platform orders realtime events
       const unsubscribe = subscribeToOrders(null, (payload) => {
         if (payload.eventType === 'INSERT') {
+          soundAlerts.playOrderBell();
           setOrders(prev => {
             if (prev.some(order => String(order.id) === String(payload.new.id))) {
               return prev;
@@ -556,8 +583,21 @@ export default function AdminPanel({ mode = 'owner' }) {
         }
       });
 
+      let unsubWaiter;
+      if (subscribeToWaiterCalls) {
+        unsubWaiter = subscribeToWaiterCalls(null, (payload) => {
+          if (payload.eventType === 'WAITER_CALL_INSERT') {
+            soundAlerts.playWaiterChime();
+            setWaiterCalls(prev => [payload.new, ...prev.filter(c => String(c.id) !== String(payload.new.id))]);
+          } else if (payload.eventType === 'WAITER_CALL_UPDATE') {
+            setWaiterCalls(prev => prev.map(c => String(c.id) === String(payload.new.id) ? payload.new : c));
+          }
+        });
+      }
+
       return () => {
         if (unsubscribe) unsubscribe();
+        if (unsubWaiter) unsubWaiter();
       };
     } else {
       setMenuItems([]);
@@ -600,6 +640,13 @@ export default function AdminPanel({ mode = 'owner' }) {
   const loadOrders = async (cafeId) => {
     const data = await fetchOrders(cafeId);
     if (data) setOrders(data);
+  };
+
+  const loadWaiterCallsData = async (cafeId) => {
+    if (fetchWaiterCalls) {
+      const data = await fetchWaiterCalls(cafeId);
+      if (data) setWaiterCalls(data);
+    }
   };
 
   // Staff Management Hooks
@@ -1881,24 +1928,48 @@ export default function AdminPanel({ mode = 'owner' }) {
           </p>
         </div>
 
-        {(adminSession || isSuperAdminSession) && (
-          <button 
-            className="btn-select" 
-            onClick={handleAdminLogout} 
-            style={{ 
-              background: 'rgba(239, 68, 68, 0.1)', 
-              color: '#ef4444', 
-              border: '1px solid rgba(239, 68, 68, 0.3)',
-              padding: '10px 20px',
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            className="btn-select"
+            onClick={() => {
+              const muted = soundAlerts.toggleMute();
+              setIsAudioMuted(muted);
+              showAdminAlert(muted ? '🔇 Audio alerts muted' : '🔊 Real-time audio alerts enabled!');
+            }}
+            style={{
+              background: isAudioMuted ? 'rgba(100, 116, 139, 0.15)' : 'rgba(8, 145, 178, 0.15)',
+              color: isAudioMuted ? 'var(--text-muted)' : 'var(--accent-cyan)',
+              border: `1px solid ${isAudioMuted ? 'rgba(100, 116, 139, 0.3)' : 'rgba(8, 145, 178, 0.4)'}`,
+              padding: '10px 16px',
               borderRadius: '12px',
               cursor: 'pointer',
               fontWeight: 'bold',
               fontSize: '0.85rem'
             }}
+            title="Toggle real-time order & waiter audio chimes"
           >
-            {isSuperAdminSession ? '🛡️ Log Out SaaS' : '🚪 Log Out Cafe'}
+            {isAudioMuted ? '🔇 Muted' : '🔔 Audio Alerts ON'}
           </button>
-        )}
+          {(adminSession || isSuperAdminSession) && (
+            <button 
+              className="btn-select" 
+              onClick={handleAdminLogout} 
+              style={{ 
+                background: 'rgba(239, 68, 68, 0.1)', 
+                color: '#ef4444', 
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                padding: '10px 20px',
+                borderRadius: '12px',
+                cursor: 'pointer',
+                fontWeight: 'bold',
+                fontSize: '0.85rem'
+              }}
+            >
+              {isSuperAdminSession ? '🛡️ Log Out SaaS' : '🚪 Log Out Cafe'}
+            </button>
+          )}
+        </div>
 
         {/* Selected Cafe Card — expanded with location + details */}
         {selectedCafe && (
@@ -2100,6 +2171,12 @@ export default function AdminPanel({ mode = 'owner' }) {
                 onClick={() => setActiveTab('sales')}
               >
                 📊 Sales Report
+              </button>
+              <button
+                className={`tab-btn ${activeTab === 'analytics' ? 'active' : ''}`}
+                onClick={() => setActiveTab('analytics')}
+              >
+                📈 Analytics
               </button>
               <button
                 className={`tab-btn ${activeTab === 'raw_inventory' ? 'active' : ''}`}
@@ -2524,6 +2601,207 @@ export default function AdminPanel({ mode = 'owner' }) {
             ) : (
               <div className="empty-state">
                 <p>⚠️ Please select a cafe from the Cafes tab to view sales data.</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ANALYTICS DASHBOARD TAB (Feature 18) */}
+        {activeTab === 'analytics' && (
+          <div className="analytics-pane animated-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            {selectedCafe || isSuperAdminSession ? (
+              <>
+                <div className="glass-card" style={{ padding: '24px', borderRadius: '16px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', marginBottom: '20px' }}>
+                    <div>
+                      <h2 style={{ margin: 0, fontSize: '1.4rem' }}>📈 Cafe Performance & Analytics</h2>
+                      <p className="admin-sub" style={{ margin: '4px 0 0 0' }}>
+                        Real-time revenue metrics, top-selling items ranking, and table activity for {selectedCafe ? selectedCafe.name : 'All Cafes'}.
+                      </p>
+                    </div>
+                    {/* Time Range Selector */}
+                    <div style={{ display: 'flex', gap: '8px', background: 'var(--bg-tertiary)', padding: '4px', borderRadius: '12px' }}>
+                      {[
+                        { key: 'today', label: 'Today' },
+                        { key: '7d', label: 'Last 7 Days' },
+                        { key: '30d', label: 'Last 30 Days' },
+                        { key: 'all', label: 'All Time' }
+                      ].map(range => (
+                        <button
+                          key={range.key}
+                          type="button"
+                          onClick={() => setAnalyticsTimeRange(range.key)}
+                          style={{
+                            padding: '8px 16px',
+                            borderRadius: '8px',
+                            border: 'none',
+                            background: analyticsTimeRange === range.key ? 'var(--accent-cyan)' : 'transparent',
+                            color: analyticsTimeRange === range.key ? '#0a0e1a' : 'var(--text-main)',
+                            fontWeight: 'bold',
+                            fontSize: '0.85rem',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s'
+                          }}
+                        >
+                          {range.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {(() => {
+                    // Filter orders by time range
+                    const now = Date.now();
+                    const filteredOrders = orders.filter(o => {
+                      const created = new Date(o.created_at).getTime();
+                      if (analyticsTimeRange === 'today') {
+                        const startOfToday = new Date();
+                        startOfToday.setHours(0,0,0,0);
+                        return created >= startOfToday.getTime();
+                      } else if (analyticsTimeRange === '7d') {
+                        return created >= now - (7 * 24 * 60 * 60 * 1000);
+                      } else if (analyticsTimeRange === '30d') {
+                        return created >= now - (30 * 24 * 60 * 60 * 1000);
+                      }
+                      return true;
+                    });
+
+                    const completed = filteredOrders.filter(o => o.status === 'completed' || o.status === 'bill_approved');
+                    const totalRev = completed.reduce((acc, o) => acc + (parseFloat(o.total_price) || 0), 0);
+                    const avgOrderVal = completed.length > 0 ? (totalRev / completed.length) : 0;
+
+                    // Compute Top Menu Items by sales count
+                    const itemStats = {};
+                    completed.forEach(o => {
+                      if (o.items && typeof o.items === 'string') {
+                        const parts = o.items.split(',');
+                        parts.forEach(part => {
+                          const match = part.trim().match(/^(\d+)x\s+(.+)$/);
+                          if (match) {
+                            const qty = parseInt(match[1]) || 1;
+                            const name = match[2].split('(')[0].trim();
+                            if (!itemStats[name]) itemStats[name] = { name, count: 0 };
+                            itemStats[name].count += qty;
+                          }
+                        });
+                      }
+                    });
+
+                    const topItems = Object.values(itemStats).sort((a, b) => b.count - a.count).slice(0, 5);
+                    const maxTopCount = topItems.length > 0 ? topItems[0].count : 1;
+
+                    // Compute Table Activity metrics
+                    const tableStats = {};
+                    filteredOrders.forEach(o => {
+                      const table = String(o.table_number || 'General');
+                      if (!tableStats[table]) tableStats[table] = { table, ordersCount: 0, revenue: 0 };
+                      tableStats[table].ordersCount += 1;
+                      if (o.status === 'completed' || o.status === 'bill_approved') {
+                        tableStats[table].revenue += (parseFloat(o.total_price) || 0);
+                      }
+                    });
+                    const topTables = Object.values(tableStats).sort((a, b) => b.revenue - a.revenue).slice(0, 6);
+
+                    return (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                        {/* High Level Stats Row */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+                          <div className="stat-card glass-card" style={{ padding: '20px', display: 'flex', gap: '14px', alignItems: 'center' }}>
+                            <div style={{ fontSize: '2rem', background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', width: '54px', height: '54px', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>💰</div>
+                            <div>
+                              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Total Revenue</span>
+                              <h3 style={{ margin: '2px 0 0 0', fontSize: '1.6rem', color: '#10b981' }}>{formatPrice(totalRev)}</h3>
+                            </div>
+                          </div>
+
+                          <div className="stat-card glass-card" style={{ padding: '20px', display: 'flex', gap: '14px', alignItems: 'center' }}>
+                            <div style={{ fontSize: '2rem', background: 'rgba(8, 145, 178, 0.15)', color: '#0891b2', width: '54px', height: '54px', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>🧾</div>
+                            <div>
+                              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Total Orders</span>
+                              <h3 style={{ margin: '2px 0 0 0', fontSize: '1.6rem' }}>{filteredOrders.length}</h3>
+                            </div>
+                          </div>
+
+                          <div className="stat-card glass-card" style={{ padding: '20px', display: 'flex', gap: '14px', alignItems: 'center' }}>
+                            <div style={{ fontSize: '2rem', background: 'rgba(124, 58, 237, 0.15)', color: '#7c3aed', width: '54px', height: '54px', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>📊</div>
+                            <div>
+                              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Average Order Value</span>
+                              <h3 style={{ margin: '2px 0 0 0', fontSize: '1.6rem' }}>{formatPrice(avgOrderVal)}</h3>
+                            </div>
+                          </div>
+
+                          <div className="stat-card glass-card" style={{ padding: '20px', display: 'flex', gap: '14px', alignItems: 'center' }}>
+                            <div style={{ fontSize: '2rem', background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', width: '54px', height: '54px', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>🎯</div>
+                            <div>
+                              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Completion Rate</span>
+                              <h3 style={{ margin: '2px 0 0 0', fontSize: '1.6rem' }}>
+                                {filteredOrders.length > 0 ? `${Math.round((completed.length / filteredOrders.length) * 100)}%` : '100%'}
+                              </h3>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Top Selling Items & Table Metrics Grid */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '20px' }}>
+                          {/* Top Selling Items Card */}
+                          <div className="glass-card" style={{ padding: '20px', borderRadius: '14px' }}>
+                            <h3 style={{ margin: '0 0 16px 0', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span>🔥 Top Selling Menu Items</span>
+                            </h3>
+                            {topItems.length === 0 ? (
+                              <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                                No order items data available for selected time range.
+                              </div>
+                            ) : (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                                {topItems.map((item, idx) => {
+                                  const pct = Math.round((item.count / maxTopCount) * 100);
+                                  return (
+                                    <div key={item.name} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', fontWeight: 600 }}>
+                                        <span>#{idx + 1} {item.name}</span>
+                                        <span style={{ color: 'var(--accent-cyan)' }}>{item.count} sold</span>
+                                      </div>
+                                      <div style={{ width: '100%', height: '8px', background: 'rgba(255,255,255,0.08)', borderRadius: '4px', overflow: 'hidden' }}>
+                                        <div style={{ width: `${pct}%`, height: '100%', background: 'linear-gradient(90deg, #00f2fe, #4facfe)', borderRadius: '4px', transition: 'width 0.5s ease' }}></div>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Table Revenue Breakdown Card */}
+                          <div className="glass-card" style={{ padding: '20px', borderRadius: '14px' }}>
+                            <h3 style={{ margin: '0 0 16px 0', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span>🪑 Table Activity & Revenue</span>
+                            </h3>
+                            {topTables.length === 0 ? (
+                              <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                                No table activity data recorded for selected time range.
+                              </div>
+                            ) : (
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '12px' }}>
+                                {topTables.map(tb => (
+                                  <div key={tb.table} style={{ background: 'var(--bg-tertiary)', padding: '12px 14px', borderRadius: '10px', border: '1px solid var(--glass-border)' }}>
+                                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600 }}>Table #{tb.table}</div>
+                                    <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#10b981', margin: '2px 0' }}>{formatPrice(tb.revenue)}</div>
+                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-main)' }}>{tb.ordersCount} Order(s)</div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </>
+            ) : (
+              <div className="empty-state">
+                <p>⚠️ Please select a cafe from the Cafes tab to view analytics.</p>
               </div>
             )}
           </div>
@@ -3046,221 +3324,143 @@ export default function AdminPanel({ mode = 'owner' }) {
               ) : (
                 <div className="cafe-grid">
                   {displayedCafes.map(cafe => (
-                    <div 
-                      key={cafe.id} 
+                    <div
+
+                      key={cafe.id}
                       className={`cafe-card ${selectedCafe?.id === cafe.id ? 'selected' : ''}`}
                     >
-                      <img 
-                        className="cafe-logo" 
-                        src={cafe.logo_url || 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=150&auto=format&fit=crop&q=60'} 
-                        alt={cafe.name} 
-                      />
-                      <div className="cafe-details">
-                        <h3>{cafe.name}</h3>
-                        {cafe.location && <p className="cafe-loc">📍 {cafe.location}</p>}
-                        <span className="cafe-tables-lbl">🗂️ Tables: {cafe.table_count || 10}</span>
+                      {/* ── Card Header: Logo + Info ── */}
+                      <div className="cafe-card-header">
+                        <img
+                          className="cafe-logo"
+                          src={cafe.logo_url || 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=150&auto=format&fit=crop&q=60'}
+                          alt={cafe.name}
+                        />
+                        <div className="cafe-details">
+                          <h3>{cafe.name}</h3>
+                          {cafe.location && <p className="cafe-loc">📍 {cafe.location}</p>}
+                          <span className="cafe-tables-lbl">🗂️ Tables: {cafe.table_count || 10}</span>
 
-                        {/* Activation Status Info */}
-                        <div style={{ marginTop: '10px', fontSize: '0.8rem', display: 'flex', flexDirection: 'column', gap: '6px', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '8px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span style={{ fontWeight: 600, color: 'var(--text-muted)' }}>Status:</span>
-                            <span style={{
-                              padding: '2px 8px',
-                              borderRadius: '6px',
-                              fontSize: '0.72rem',
-                              fontWeight: 'bold',
-                              textTransform: 'uppercase',
-                              background: cafe.is_activated ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)',
-                              color: cafe.is_activated ? '#10b981' : '#f59e0b',
-                              border: cafe.is_activated ? '1px solid rgba(16, 185, 129, 0.2)' : '1px solid rgba(245, 158, 11, 0.2)'
-                            }}>
-                              {cafe.is_activated ? 'Active ✅' : 'Pending ⏳'}
-                            </span>
-                          </div>
-                          
-                          {cafe.activation_key && (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                              <span style={{ fontWeight: 600, color: 'var(--text-muted)' }}>Key:</span>
-                              <code style={{ background: 'rgba(255,255,255,0.06)', padding: '3px 8px', borderRadius: '6px', fontFamily: 'monospace', fontSize: '0.78rem', color: cafe.is_activated ? 'var(--text-muted)' : '#00f2fe' }}>
-                                {cafe.is_activated ? 'USED' : cafe.activation_key}
-                              </code>
-                              {!cafe.is_activated && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    navigator.clipboard.writeText(cafe.activation_key);
-                                    showAdminAlert('🔑 Activation key copied to clipboard!');
-                                  }}
-                                  style={{
-                                    background: 'rgba(255,255,255,0.04)',
-                                    border: '1px solid rgba(255,255,255,0.08)',
-                                    borderRadius: '6px',
-                                    padding: '2px 8px',
-                                    color: 'var(--text-muted)',
-                                    cursor: 'pointer',
-                                    fontSize: '0.72rem',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '3px',
-                                    transition: 'all 0.2s'
-                                  }}
-                                  onMouseOver={(e) => {
-                                    e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
-                                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)';
-                                  }}
-                                  onMouseOut={(e) => {
-                                    e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
-                                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)';
-                                  }}
-                                >
-                                  📋 Copy
-                                </button>
-                              )}
+                          {/* Status + Key */}
+                          <div style={{ marginTop: '10px', fontSize: '0.8rem', display: 'flex', flexDirection: 'column', gap: '6px', borderTop: '1px solid var(--glass-border)', paddingTop: '8px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontWeight: 600, color: 'var(--text-muted)' }}>Status:</span>
+                              <span style={{
+                                padding: '2px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 'bold', textTransform: 'uppercase',
+                                background: cafe.is_activated ? 'rgba(16,185,129,0.12)' : 'rgba(245,158,11,0.12)',
+                                color: cafe.is_activated ? '#10b981' : '#f59e0b',
+                                border: cafe.is_activated ? '1px solid rgba(16,185,129,0.2)' : '1px solid rgba(245,158,11,0.2)'
+                              }}>
+                                {cafe.is_activated ? 'Active ✅' : 'Pending ⏳'}
+                              </span>
                             </div>
-                          )}
+                            {cafe.activation_key && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                <span style={{ fontWeight: 600, color: 'var(--text-muted)' }}>Key:</span>
+                                <code style={{ background: 'var(--bg-tertiary)', padding: '3px 8px', borderRadius: '6px', fontFamily: 'monospace', fontSize: '0.78rem', color: cafe.is_activated ? 'var(--text-muted)' : 'var(--accent-cyan)' }}>
+                                  {cafe.is_activated ? 'USED' : cafe.activation_key}
+                                </code>
+                                {!cafe.is_activated && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(cafe.activation_key); showAdminAlert('🔑 Activation key copied!'); }}
+                                    style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--glass-border)', borderRadius: '6px', padding: '2px 8px', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                                  >
+                                    📋 Copy
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
-                      <div className="cafe-actions">
-                        <button 
-                          className="btn-select"
-                          onClick={() => {
-                            setSelectedCafe(cafe);
-                            if (isSuperAdminSession) {
-                              setActiveTab('menu');
-                            }
-                          }}
-                        >
-                          {isSuperAdminSession 
-                            ? (selectedCafe?.id === cafe.id ? 'Active Workspace' : 'Manage Workspace ➔')
-                            : (selectedCafe?.id === cafe.id ? 'Active' : 'Manage')}
-                        </button>
-                        <a 
-                          href={`/table/4?cafe=${cafe.id}`} 
-                          target="_blank" 
-                          rel="noopener noreferrer" 
-                          className="btn-select link-customer-view"
-                          style={{ textDecoration: 'none', background: 'rgba(0, 242, 254, 0.1)', color: 'var(--accent-cyan)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                        >
-                          📱 Menu
-                        </a>
-                        {isSuperAdminSession && (
-                          inlineResetPasswordCafeId === cafe.id ? (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', width: '100%', marginTop: '8px', flexBasis: '100%' }}>
-                              <input 
-                                type="text"
-                                placeholder="New Password"
-                                value={inlineNewPassword}
-                                onChange={(e) => setInlineNewPassword(e.target.value)}
-                                style={{ flex: 1, padding: '4px 8px', fontSize: '0.78rem', height: '28px', minWidth: '80px' }}
-                              />
-                              <button 
-                                type="button"
-                                className="btn-primary"
-                                onClick={() => handleSuperAdminResetPassword(cafe.id)}
-                                style={{ padding: '0 8px', fontSize: '0.75rem', height: '28px', display: 'inline-flex', alignItems: 'center' }}
-                              >
-                                Save
-                              </button>
-                              <button 
-                                type="button"
-                                className="btn-select"
-                                onClick={() => { setInlineResetPasswordCafeId(null); setInlineNewPassword(''); }}
-                                style={{ padding: '0 8px', fontSize: '0.75rem', height: '28px', display: 'inline-flex', alignItems: 'center' }}
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              type="button"
-                              className="btn-select"
-                              onClick={() => {
-                                setInlineResetPasswordCafeId(cafe.id);
-                                setInlineNewPassword('');
-                              }}
-                              style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', border: '1px solid rgba(245, 158, 11, 0.2)' }}
-                            >
-                              🔑 Reset Pass
-                            </button>
-                          )
-                        )}
 
+                      {/* ── CTA Grid: 2-column labeled action buttons ── */}
+                      <div className="cafe-actions-grid">
+
+                        {/* Open Workspace */}
+                        <button
+                          className="cafe-cta-btn cafe-cta-primary"
+                          onClick={() => { setSelectedCafe(cafe); if (isSuperAdminSession) setActiveTab('menu'); }}
+                        >
+                          <span className="cafe-cta-icon">🏢</span>
+                          <span className="cafe-cta-label">{selectedCafe?.id === cafe.id ? 'Active Workspace' : 'Open Workspace'}</span>
+                        </button>
+
+                        {/* Preview Menu */}
+                        <a
+                          href={`/table/4?cafe=${cafe.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="cafe-cta-btn cafe-cta-cyan"
+                        >
+                          <span className="cafe-cta-icon">📱</span>
+                          <span className="cafe-cta-label">Preview Menu</span>
+                        </a>
+
+                        {/* Super Admin Only Actions */}
                         {isSuperAdminSession && (
-                          <>  
-                            {/* WhatsApp Credential Sharing */}
+                          <>
+                            {/* Reset Password */}
+                            {inlineResetPasswordCafeId === cafe.id ? (
+                              <div className="cafe-cta-reset-row">
+                                <input
+                                  type="text"
+                                  placeholder="Enter new password…"
+                                  value={inlineNewPassword}
+                                  onChange={(e) => setInlineNewPassword(e.target.value)}
+                                  className="cafe-cta-reset-input"
+                                />
+                                <button type="button" className="cafe-cta-btn cafe-cta-primary" style={{ padding: '0 14px', minWidth: 'unset' }} onClick={() => handleSuperAdminResetPassword(cafe.id)}>Save</button>
+                                <button type="button" className="cafe-cta-btn cafe-cta-ghost" style={{ padding: '0 10px', minWidth: 'unset' }} onClick={() => { setInlineResetPasswordCafeId(null); setInlineNewPassword(''); }}>✕</button>
+                              </div>
+                            ) : (
+                              <button type="button" className="cafe-cta-btn cafe-cta-amber" onClick={() => { setInlineResetPasswordCafeId(cafe.id); setInlineNewPassword(''); }}>
+                                <span className="cafe-cta-icon">🔑</span>
+                                <span className="cafe-cta-label">Reset Password</span>
+                              </button>
+                            )}
+
+                            {/* Send via WhatsApp */}
                             <button
                               type="button"
-                              className="btn-select"
-                              title="Share credentials via WhatsApp"
-                              style={{ background: 'rgba(37, 211, 102, 0.12)', color: '#25d366', border: '1px solid rgba(37, 211, 102, 0.25)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                              className="cafe-cta-btn cafe-cta-green"
                               onClick={() => {
                                 const liveUrl = window.location.origin;
-                                const msg = [
-                                  `🏢 *QR Menu SaaS — Branch Credentials*`,
-                                  `Branch: *${cafe.name}*`,
-                                  cafe.location ? `📍 Location: ${cafe.location}` : '',
-                                  ``,
-                                  `🔑 Activation Key: \`${cafe.activation_key || 'N/A'}\``,
-                                  `👤 Admin Username: \`${cafe.admin_username || cafe.name?.toLowerCase().replace(/\s+/g, '') || 'N/A'}\``,
-                                  `🔒 Admin Password: \`${cafe.admin_password || '(contact SaaS admin)'}\``,
-                                  ``,
-                                  `🌐 Admin Portal: ${liveUrl}/admin`,
-                                  `📱 Customer Menu (Table 1): ${liveUrl}/table/1?cafe=${cafe.id}`,
-                                ].filter(Boolean).join('\n');
+                                const msg = [`🏢 *QR Menu SaaS — Branch Credentials*`, `Branch: *${cafe.name}*`, cafe.location ? `📍 Location: ${cafe.location}` : '', ``, `🔑 Activation Key: \`${cafe.activation_key || 'N/A'}\``, `👤 Admin Username: \`${cafe.admin_username || cafe.name?.toLowerCase().replace(/\s+/g, '') || 'N/A'}\``, `🔒 Admin Password: \`${cafe.admin_password || '(contact SaaS admin)'}\``, ``, `🌐 Admin Portal: ${liveUrl}/admin`, `📱 Customer Menu: ${liveUrl}/table/1?cafe=${cafe.id}`].filter(Boolean).join('\n');
                                 window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
                               }}
                             >
-                              📲 WhatsApp
+                              <span className="cafe-cta-icon">📲</span>
+                              <span className="cafe-cta-label">Send via WhatsApp</span>
                             </button>
 
-                            {/* Copy All Credentials */}
+                            {/* Copy Credentials */}
                             <button
                               type="button"
-                              className="btn-select"
-                              title="Copy all credentials to clipboard"
-                              style={{ background: 'rgba(99, 102, 241, 0.12)', color: '#818cf8', border: '1px solid rgba(99, 102, 241, 0.25)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                              className="cafe-cta-btn cafe-cta-indigo"
                               onClick={() => {
                                 const liveUrl = window.location.origin;
-                                const text = [
-                                  `Branch: ${cafe.name}`,
-                                  `Activation Key: ${cafe.activation_key || 'N/A'}`,
-                                  `Admin Username: ${cafe.admin_username || cafe.name?.toLowerCase().replace(/\s+/g, '') || 'N/A'}`,
-                                  `Admin Password: ${cafe.admin_password || '(contact SaaS admin)'}`,
-                                  `Admin Portal: ${liveUrl}/admin`,
-                                  `Customer Menu (Table 1): ${liveUrl}/table/1?cafe=${cafe.id}`,
-                                ].join('\n');
+                                const text = [`Branch: ${cafe.name}`, `Activation Key: ${cafe.activation_key || 'N/A'}`, `Admin Username: ${cafe.admin_username || cafe.name?.toLowerCase().replace(/\s+/g, '') || 'N/A'}`, `Admin Password: ${cafe.admin_password || '(contact SaaS admin)'}`, `Admin Portal: ${liveUrl}/admin`, `Customer Menu: ${liveUrl}/table/1?cafe=${cafe.id}`].join('\n');
                                 navigator.clipboard.writeText(text);
                                 showAdminAlert('📋 All credentials copied to clipboard!');
                               }}
                             >
-                              📋 Copy Creds
+                              <span className="cafe-cta-icon">📋</span>
+                              <span className="cafe-cta-label">Copy Credentials</span>
                             </button>
 
-                            {/* Delete cafe */}
+                            {/* Delete — full-width danger */}
                             {deleteCafeConfirmId === cafe.id ? (
-                              <div className="inline-confirm-row">
-                                <button 
-                                  className="btn-confirm-yes"
-                                  onClick={() => handleDeleteCafe(cafe.id)}
-                                  title="Confirm deleting this cafe"
-                                >
-                                  🗑️ Confirm?
-                                </button>
-                                <button 
-                                  className="btn-confirm-no"
-                                  onClick={() => setDeleteCafeConfirmId(null)}
-                                >
-                                  Cancel
-                                </button>
+                              <div className="cafe-cta-confirm-row">
+                                <span className="cafe-cta-confirm-text">⚠️ Delete <strong>{cafe.name}</strong>? This cannot be undone.</span>
+                                <button className="cafe-cta-btn cafe-cta-danger" onClick={() => handleDeleteCafe(cafe.id)}>Yes, Delete</button>
+                                <button className="cafe-cta-btn cafe-cta-ghost" onClick={() => setDeleteCafeConfirmId(null)}>Cancel</button>
                               </div>
                             ) : (
-                              <button 
-                                className="btn-delete-icon"
-                                onClick={() => handleDeleteCafe(cafe.id)}
-                                title="Delete Cafe"
-                              >
-                                🗑️
+                              <button className="cafe-cta-btn cafe-cta-danger-ghost" onClick={() => setDeleteCafeConfirmId(cafe.id)}>
+                                <span className="cafe-cta-icon">🗑️</span>
+                                <span className="cafe-cta-label">Delete Cafe</span>
                               </button>
                             )}
                           </>
@@ -3806,12 +4006,12 @@ export default function AdminPanel({ mode = 'owner' }) {
             <div className="qr-stickers-manager glass-card">
               <div className="stickers-header-row">
                 <div>
-                  <h2>🖨️ QR Code Stickers Generator</h2>
-                  <p>Generate print-ready sticker sheets for physical tables at <strong>{selectedCafe.name}</strong>.</p>
+                  <h2 style={{ color: 'var(--text-heading, #0f172a)', margin: 0 }}>🖨️ QR Code Stickers Generator</h2>
+                  <p style={{ color: 'var(--text-muted, #475569)', margin: '4px 0 0 0' }}>Generate print-ready sticker sheets for physical tables at <strong style={{ color: 'var(--text-heading, #0f172a)' }}>{selectedCafe.name}</strong>.</p>
                 </div>
                 <button
                   className="btn-primary"
-                  style={{ background: 'linear-gradient(135deg, #10b981, #059669)', minWidth: '180px' }}
+                  style={{ background: 'linear-gradient(135deg, #10b981, #059669)', minWidth: '180px', color: '#ffffff', fontWeight: 'bold' }}
                   onClick={() => {
                     const targetDomain = formatQrDomain(qrBaseUrl);
                     const tableCount = selectedCafe.table_count || 10;
@@ -3879,7 +4079,7 @@ export default function AdminPanel({ mode = 'owner' }) {
 
               <div className="stickers-config-card glass-card">
                 <div className="form-group">
-                  <label>Change Tables Count for this Cafe:</label>
+                  <label style={{ color: 'var(--text-heading, #0f172a)', fontWeight: 600 }}>Change Tables Count for this Cafe:</label>
                   <div className="inline-config-row" style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
                     <input 
                       type="number" 
@@ -3894,25 +4094,36 @@ export default function AdminPanel({ mode = 'owner' }) {
                           setCafes(prev => prev.map(c => c.id === selectedCafe.id ? updated : c));
                         }
                       }}
-                      style={{ width: '80px', padding: '0.45rem', borderRadius: '6px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--glass-border)', color: 'white', fontWeight: 'bold' }}
+                      style={{ width: '80px', padding: '0.45rem', borderRadius: '6px', background: 'var(--input-bg, #ffffff)', border: '1.5px solid #cbd5e1', color: 'var(--text-heading, #0f172a)', fontWeight: 'bold' }}
                     />
-                    <span className="info-tip" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Dynamic QR links update automatically.</span>
+                    <span className="info-tip" style={{ fontSize: '0.8rem', color: 'var(--text-muted, #475569)' }}>Dynamic QR links update automatically.</span>
                   </div>
                 </div>
                 
                 <div className="form-group" style={{ marginTop: '1rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', flexWrap: 'wrap', gap: '8px' }}>
-                    <label style={{ margin: 0 }}>Base URL / Public Domain for QR Codes (Mobile Scanning):</label>
+                    <label style={{ margin: 0, color: 'var(--text-heading, #0f172a)', fontWeight: 600 }}>Base URL / Public Domain for QR Codes (Mobile Scanning):</label>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       {qrDomainSavedBadge && (
-                        <span style={{ fontSize: '0.75rem', padding: '3px 10px', borderRadius: '12px', background: 'rgba(16, 185, 129, 0.25)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.5)', fontWeight: 'bold', animation: 'pulse 1s infinite' }}>
+                        <span style={{ fontSize: '0.75rem', padding: '3px 10px', borderRadius: '12px', background: 'rgba(16, 185, 129, 0.2)', color: '#059669', border: '1px solid rgba(16, 185, 129, 0.4)', fontWeight: 'bold', animation: 'pulse 1s infinite' }}>
                           ✅ Saved to DB for {selectedCafe.name}!
                         </span>
                       )}
                       <button
                         type="button"
-                        className="btn-select"
-                        style={{ fontSize: '0.75rem', padding: '4px 12px', height: '30px', background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.3), rgba(5, 150, 105, 0.4))', color: '#6ee7b7', border: '1px solid rgba(16, 185, 129, 0.5)', fontWeight: 'bold', cursor: 'pointer' }}
+                        className="btn-save-qr-domain"
+                        style={{
+                          fontSize: '0.78rem',
+                          padding: '6px 14px',
+                          height: '34px',
+                          background: '#059669',
+                          color: '#ffffff',
+                          border: '1px solid #047857',
+                          borderRadius: '8px',
+                          fontWeight: 'bold',
+                          cursor: 'pointer',
+                          boxShadow: '0 2px 4px rgba(5, 150, 105, 0.2)'
+                        }}
                         onClick={async () => {
                           const formatted = formatQrDomain(qrBaseUrl);
                           setQrBaseUrl(formatted);
@@ -3941,16 +4152,34 @@ export default function AdminPanel({ mode = 'owner' }) {
                   <div style={{ display: 'flex', gap: '8px', marginTop: '8px', flexWrap: 'wrap' }}>
                     <button 
                       type="button" 
-                      className="btn-select" 
-                      style={{ fontSize: '0.75rem', padding: '4px 10px', background: 'rgba(0, 242, 254, 0.15)', color: '#00f2fe', border: '1px solid rgba(0, 242, 254, 0.3)' }}
+                      className="btn-live-domain-shortcut" 
+                      style={{
+                        fontSize: '0.78rem',
+                        padding: '6px 12px',
+                        background: 'rgba(3, 105, 161, 0.12)',
+                        color: '#0369a1',
+                        border: '1.5px solid #0284c7',
+                        borderRadius: '8px',
+                        fontWeight: 'bold',
+                        cursor: 'pointer'
+                      }}
                       onClick={() => setQrBaseUrl(window.location.origin)}
                     >
                       🌐 Use Current Live Domain ({window.location.origin})
                     </button>
                     <button 
                       type="button" 
-                      className="btn-select" 
-                      style={{ fontSize: '0.75rem', padding: '4px 10px', background: 'rgba(255, 255, 255, 0.08)', border: '1px solid rgba(255, 255, 255, 0.15)' }}
+                      className="btn-local-domain-shortcut"
+                      style={{
+                        fontSize: '0.78rem',
+                        padding: '6px 12px',
+                        background: '#f1f5f9',
+                        color: '#1e293b',
+                        border: '1.5px solid #cbd5e1',
+                        borderRadius: '8px',
+                        fontWeight: '600',
+                        cursor: 'pointer'
+                      }}
                       onClick={() => setQrBaseUrl('http://localhost:5173')}
                     >
                       💻 Local Dev Server (http://localhost:5173)
