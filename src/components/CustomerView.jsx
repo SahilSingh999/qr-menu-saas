@@ -1933,10 +1933,10 @@ export default function CustomerView() {
       )}
 
       {orderTracking && (
-        <div style={{ textAlign: 'center', margin: '0 0 24px 0' }}>
+        <div className="cv-view-menu-wrapper">
           <button 
             type="button"
-            className="btn-place-another" 
+            className="cv-view-menu-btn" 
             onClick={() => {
               const next = !showMenuCatalogDuringTracking;
               setShowMenuCatalogDuringTracking(next);
@@ -1945,20 +1945,6 @@ export default function CustomerView() {
                   window.scrollBy({ top: 350, behavior: 'smooth' });
                 }, 150);
               }
-            }}
-            style={{ 
-              background: 'rgba(var(--customer-accent-rgb), 0.05)', 
-              border: '2px solid rgba(var(--customer-accent-rgb), 0.3)', 
-              color: 'var(--customer-accent)',
-              padding: '12px 24px',
-              borderRadius: '12px',
-              fontWeight: 'bold',
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '8px',
-              fontSize: '0.9rem',
-              transition: 'all 0.2s ease'
             }}
           >
             {showMenuCatalogDuringTracking ? '📖 Hide Menu Catalog' : '📖 View Menu & Order More'}
