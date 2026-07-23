@@ -1,11 +1,25 @@
 ## How to Continue Work Later
+
 1. Open terminal in `d:\qr-menu-saas` and run `npm run dev` if testing locally.
 2. Production site is live at: **`https://qr-menu-saas-dun.vercel.app`**
 3. Access points:
    - Admin Panel: `https://qr-menu-saas-dun.vercel.app/admin`
    - Super Admin Console: `https://qr-menu-saas-dun.vercel.app/superadmin`
-   - Customer Menu: `https://qr-menu-saas-dun.vercel.app/table/1?cafe=<ID>`
+   - Customer Menu: `https://qr-menu-saas-dun.vercel.app/table/1?cafe=1`
    - Waiter Dashboard: `https://qr-menu-saas-dun.vercel.app/waiter`
+
+---
+
+## 🎯 RESUME PROMPT FOR NEXT SESSION
+
+Copy and paste the exact prompt below into your next chat session to pick up right where we left off:
+
+```text
+Hello AI! I am resuming work on the QR Menu SaaS project in d:\qr-menu-saas.
+All recent progress is saved, committed, and deployed on Vercel at https://qr-menu-saas-dun.vercel.app.
+Please read PROJECT_STATUS.md to get full context on completed features and codebase architecture.
+Let me know the status and we can pick up from our current checkpoint.
+```
 
 ---
 
@@ -62,7 +76,9 @@ Multi-tenant QR Menu SaaS. Super Admin provisions cafe branches. Owners get acti
 16. **QR Domain Auto-Detection** - qrBaseUrl now uses window.location.origin, fixing 404 on phone scan
 17. **QR Domain Hardcode Fix & Interceptor** - Removed ALL stale `qr-menu-saas.vercel.app` hardcodes; `formatQrDomain` in `security.js` automatically rewrites dead domains to `window.location.origin`.
 18. **Save Domain Confirmation Feedback** - Added animated confirmation badge (`✅ Saved to DB for [Cafe Name]!`) and top alert banner when saving default QR domains in AdminPanel.
-19. **Running Table Tab (Add-on Order Merge)** - Multiple add-on orders placed at the same table automatically group into one unified running tab (e.g. Rs 300 + Rs 500 = Rs 800) with combined receipts across Customer View, Waiter Dashboard, and Admin Panel.
+19. **Option 1 Independent Order Tickets Architecture** - Each cart checkout generates a clean, independent order ticket for kitchen and staff (`Ticket #1`, `Ticket #2`), preventing items from being re-cooked or mangled.
+20. **Mobile-Optimized Order Overview & Final Combined Checkout** - Customer view dynamically sums all active table tickets into a **FINAL COMBINED TOTAL** (e.g. Ticket #1: ₹200 + Ticket #2: ₹400 = **₹600**), with an itemized tickets dropdown (`📋 Tickets (2) ▼`) and non-blocking toggle behavior.
+21. **Persistent Table Orders History Array** - Stored in `placed_orders_history_cafe_X_table_Y` to guarantee total bill and round-by-round breakdown retention across page refreshes, tab switches, and mobile network reconnections.
 
 ---
 
@@ -84,11 +100,10 @@ Multi-tenant QR Menu SaaS. Super Admin provisions cafe branches. Owners get acti
 2. **Reprint QR Stickers** — Admin → QR & Stickers tab → click "Print Stickers Sheet" → replace old physical table stickers with new ones.
 
 ### 🟡 NEXT FEATURES TO BUILD
-3. **Feature 18: Analytics Dashboard** — Revenue stats, top menu items, orders-by-table charts
-4. **Feature 19: Real-time Order Sound Alerts** — Audio ding + badge count when new order arrives
-5. **Feature 20: Waiter Call Button** — Customer taps "Call Waiter" on menu; admin sees live alert
-6. **Feature 21: Menu Category Drag-and-Drop Reorder** — Reorder categories and items in admin
-7. **Feature 22: Multi-language Menu** — Toggle Hindi/English on customer view
+3. **Analytics Dashboard** — Revenue stats, top menu items, orders-by-table charts
+4. **Real-time Order Sound Alerts** — Audio ding + badge count when new order arrives
+5. **Menu Category Drag-and-Drop Reorder** — Reorder categories and items in admin
+6. **Multi-language Menu** — Toggle Hindi/English on customer view
 
 ---
 
@@ -97,8 +112,11 @@ Multi-tenant QR Menu SaaS. Super Admin provisions cafe branches. Owners get acti
 | File | Purpose |
 |------|---------|
 | src/utils/security.js | SHA-256 auth, formatQrDomain domain interceptor |
-| src/components/AdminPanel.jsx | Main admin + super admin panel |
+| src/components/CustomerView.jsx | Digital menu + Order overview + Combined checkout |
+| src/components/WaiterDashboard.jsx | Waiter dashboard + table merging + multi-order ticket receipts |
+| src/components/AdminPanel.jsx | Main admin + super admin panel + PrintBillModal |
 | src/context/SupabaseContext.jsx | Supabase DB calls, auth, local overrides sync |
 | src/index.css | Full design system + @media print isolation |
 | vercel.json | SPA rewrite rule (/* → /index.html) |
 | supabase/migrations/ | SQL schema migrations |
+
