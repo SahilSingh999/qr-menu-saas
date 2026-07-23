@@ -1957,11 +1957,8 @@ export default function CustomerView() {
         </div>
       )}
 
-      {/* ── MAIN CONTENT AREA (menu catalog is ALWAYS visible per wireframe) ── */}
+      {/* ── MAIN CONTENT AREA (menu catalog) ── */}
       <div className="cv-content-area">
-        <div className="cv-section-header-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-          <h2 style={{ fontSize: '1.4rem', fontWeight: 800, margin: 0, color: 'var(--text-heading)' }}>All items</h2>
-        </div>
 
           {/* ── MENU SECTION ── */}
           <div className="cv-menu-section">
