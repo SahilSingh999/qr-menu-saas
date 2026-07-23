@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { useSupabase } from '../context/SupabaseContext';
 import { useCurrency } from '../context/CurrencyContext';
+import { getRunningTabs, formatTabConsolidatedItems } from '../utils/tableTabUtils';
 
 // Canvas-based Retro Snake Game
 const SnakeGame = ({ themeColor }) => {
@@ -905,6 +906,7 @@ export default function CustomerView() {
     supabase,
     fetchCafes,
     fetchMenuItems,
+    fetchOrders,
     createOrder,
     uploadImage,
     updateOrder,
@@ -921,6 +923,8 @@ export default function CustomerView() {
   const [cart, setCart] = useState([]);
   const [placedOrder, setPlacedOrder] = useState(null);
   const [orderTracking, setOrderTracking] = useState(null);
+  const [activeTableOrders, setActiveTableOrders] = useState([]);
+  const [showRunningTabDrawer, setShowRunningTabDrawer] = useState(false);
   const [selectedPortions, setSelectedPortions] = useState({});
 
   // Resolve scanned table to its primary parent table ID if a merge exists
@@ -1080,6 +1084,33 @@ export default function CustomerView() {
       };
     }
   }, [placedOrder, cafeId, resolvedTableId]);
+
+  // Load all active table orders for Running Table Tab
+  const loadTableOrders = async () => {
+    if (!cafeId || !resolvedTableId) return;
+    const targetCafeId = parseInt(cafeId);
+    const allOrders = await fetchOrders(targetCafeId);
+    if (allOrders && Array.isArray(allOrders)) {
+      const activeForTable = allOrders.filter(o => {
+        if (!o) return false;
+        if (o.status === 'completed' || o.status === 'cancelled' || o.status === 'assistance_resolved') return false;
+        const oTable = String(o.table_number || '');
+        return oTable === String(resolvedTableId) || oTable === String(tableId);
+      });
+      setActiveTableOrders(activeForTable);
+    }
+  };
+
+  useEffect(() => {
+    loadTableOrders();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cafeId, resolvedTableId, placedOrder]);
+
+  const runningTabTotal = activeTableOrders.reduce((sum, o) => {
+    if (o.status === 'assistance_needed') return sum;
+    const priceNum = typeof o.total_price === 'number' ? o.total_price : parseFloat(o.total_price || 0);
+    return sum + (isNaN(priceNum) ? 0 : priceNum);
+  }, 0);
 
   // Polling fallback to ensure status is updated even if socket connection drops on mobile device wakeups
   useEffect(() => {
@@ -1442,31 +1473,39 @@ export default function CustomerView() {
   };
 
   const handleRequestBillNoPhotos = async () => {
-    const activeOrder = orderTracking || placedOrder;
-    if (!activeOrder) {
+    const targetOrders = activeTableOrders.filter(o => o.status !== 'assistance_needed');
+    const fallbackOrder = orderTracking || placedOrder;
+    const ordersToUpdate = targetOrders.length > 0 ? targetOrders : (fallbackOrder ? [fallbackOrder] : []);
+
+    if (!ordersToUpdate.length) {
       showToast('❌ No active order found to request bill for.', 'error');
       return;
     }
     try {
-      let finalPrice = activeOrder.total_price || 0;
-      let finalItems = activeOrder.items || '';
+      let lastUpdated = null;
+      for (const ord of ordersToUpdate) {
+        let finalPrice = ord.total_price || 0;
+        let finalItems = ord.items || '';
 
-      if (voucherDiscount > 0) {
-        const voucherDiscountAmount = finalPrice * voucherDiscount;
-        finalPrice = finalPrice - voucherDiscountAmount;
-        finalItems = finalItems + `\n[🎟️ 20% Voucher Applied]`;
+        if (voucherDiscount > 0) {
+          const voucherDiscountAmount = finalPrice * voucherDiscount;
+          finalPrice = finalPrice - voucherDiscountAmount;
+          finalItems = finalItems + `\n[🎟️ 20% Voucher Applied]`;
+        }
+
+        const updated = await updateOrder(ord.id, { 
+          status: 'bill_requested',
+          total_price: finalPrice,
+          items: finalItems
+        });
+        if (updated) lastUpdated = updated;
       }
 
-      const updated = await updateOrder(activeOrder.id, { 
-        status: 'bill_requested',
-        total_price: finalPrice,
-        items: finalItems
-      });
-      if (updated) {
-        setOrderTracking(updated);
-        setPlacedOrder(updated);
-        localStorage.setItem(`placed_order_cafe_${cafeId}_table_${resolvedTableId}`, JSON.stringify(updated));
-        showToast('📝 Bill request submitted successfully!', 'success');
+      if (lastUpdated) {
+        setOrderTracking(lastUpdated);
+        setPlacedOrder(lastUpdated);
+        localStorage.setItem(`placed_order_cafe_${cafeId}_table_${resolvedTableId}`, JSON.stringify(lastUpdated));
+        showToast('📝 Bill request submitted for entire table tab!', 'success');
       } else {
         showToast('❌ Failed to request bill. Please try again.', 'error');
       }
@@ -1758,6 +1797,68 @@ export default function CustomerView() {
       {activeMerge && (
         <div className="cv-group-banner animated-slide-down">
           <span>🔗 <strong>Group Session Active:</strong> Linked with Table {activeMerge.primary} (Group: {activeMerge.primary}, {activeMerge.children.join(', ')}). Carts & Orders are combined.</span>
+        </div>
+      )}
+
+      {/* ── RUNNING TABLE TAB BANNER ── */}
+      {activeTableOrders.filter(o => o.status !== 'assistance_needed').length > 0 && (
+        <div className="cv-running-tab-banner glass-card animated-slide-down" style={{ margin: '14px 0', padding: '14px 18px', background: 'rgba(0, 242, 254, 0.08)', border: '1px solid rgba(0, 242, 254, 0.3)', borderRadius: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+            <div>
+              <h4 style={{ margin: 0, fontSize: '1.05rem', color: '#00f2fe', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                🔥 Running Table Tab Active
+                <span style={{ fontSize: '0.75rem', background: 'rgba(0, 242, 254, 0.2)', color: 'white', padding: '2px 8px', borderRadius: '10px', fontWeight: 'bold' }}>
+                  {activeTableOrders.filter(o => o.status !== 'assistance_needed').length} {activeTableOrders.filter(o => o.status !== 'assistance_needed').length === 1 ? 'Order' : 'Orders'}
+                </span>
+              </h4>
+              <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                All add-on orders placed at Table {tableId} automatically group into your running tab.
+              </span>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>TOTAL TAB BALANCE</span>
+              <strong style={{ fontSize: '1.3rem', color: '#10b981' }}>{formatPrice(runningTabTotal)}</strong>
+            </div>
+          </div>
+
+          {/* Breakdown Drawer */}
+          {showRunningTabDrawer && (
+            <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '10px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
+              {activeTableOrders.filter(o => o.status !== 'assistance_needed').map((ord, idx) => (
+                <div key={ord.id} style={{ borderBottom: idx < activeTableOrders.length - 1 ? '1px solid rgba(255,255,255,0.06)' : 'none', paddingBottom: idx < activeTableOrders.length - 1 ? '6px' : '0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', fontWeight: 'bold' }}>
+                    <span>Order #${idx + 1} ({new Date(ord.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})</span>
+                    <span className={`status-badge badge-${ord.status}`} style={{ fontSize: '0.7rem', padding: '1px 6px' }}>
+                      {ord.status.toUpperCase()}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)', marginTop: '2px' }}>
+                    {ord.items}
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: '#10b981', marginTop: '2px' }}>
+                    Subtotal: {formatPrice(ord.total_price || 0)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '4px' }}>
+            <button 
+              type="button" 
+              onClick={() => setShowRunningTabDrawer(!showRunningTabDrawer)}
+              style={{ background: 'rgba(255,255,255,0.08)', color: 'var(--text-primary)', border: '1px solid rgba(255,255,255,0.15)', padding: '6px 12px', borderRadius: '8px', fontSize: '0.8rem', cursor: 'pointer' }}
+            >
+              {showRunningTabDrawer ? 'Hide Tab Details ▲' : '📋 View Tab Breakdown ▼'}
+            </button>
+            <button 
+              type="button" 
+              onClick={() => setShowBillRequestModal(true)}
+              style={{ background: '#10b981', color: 'white', border: 'none', padding: '6px 14px', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 'bold', cursor: 'pointer' }}
+            >
+              💰 Request Bill & Pay
+            </button>
+          </div>
         </div>
       )}
 

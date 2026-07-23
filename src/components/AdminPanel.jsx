@@ -4503,49 +4503,65 @@ export function PrintBillModal({ order, cafe, menuItems, formatPrice, onClose, o
     cafe?.currency === 'NPR' ? 'VAT' : 'Sales Tax'
   );
   
-  // Parse items
+  // Extract order list (handles single order or Running Table Tab with multiple orders)
+  const ordersList = order.tabOrders && Array.isArray(order.tabOrders) && order.tabOrders.length > 0
+    ? order.tabOrders
+    : [order];
+
+  const primaryTableNum = order.table_number || order.primaryTable || ordersList[0]?.table_number || 'General';
+  const isMultiOrderTab = ordersList.length > 1;
+
+  // Parse items across all orders in the tab
   const parsedItems = [];
-  const regex = /(\d+)x\s+([^,\n([)]+)(?:\s*\(([^)]+)\))?/g;
-  let match;
-  const itemsText = order.items || '';
   let foundAny = false;
-  
-  while ((match = regex.exec(itemsText)) !== null) {
-    const qty = parseInt(match[1]);
-    const name = match[2].trim();
-    const portion = match[3] ? match[3].trim() : null;
+
+  ordersList.forEach((ord, ordIdx) => {
+    const regex = /(\d+)x\s+([^,\n([)]+)(?:\s*\(([^)]+)\))?/g;
+    let match;
+    const itemsText = ord.items || '';
     
-    const menuItem = menuItems.find(m => m.name.toLowerCase() === name.toLowerCase());
-    parsedItems.push({
-      qty,
-      name,
-      portion,
-      price: menuItem ? menuItem.price : (order.total_price / qty),
-      total: menuItem ? (menuItem.price * qty) : order.total_price
-    });
-    if (menuItem) foundAny = true;
-  }
-  
+    while ((match = regex.exec(itemsText)) !== null) {
+      const qty = parseInt(match[1]);
+      const name = match[2].trim();
+      const portion = match[3] ? match[3].trim() : null;
+      
+      const menuItem = menuItems.find(m => m.name.toLowerCase() === name.toLowerCase());
+      const itemPrice = menuItem ? menuItem.price : ((ord.total_price || 0) / qty);
+      
+      parsedItems.push({
+        qty,
+        name,
+        portion,
+        price: itemPrice,
+        total: menuItem ? (menuItem.price * qty) : (ord.total_price || 0),
+        orderBadge: isMultiOrderTab ? `Add-on #${ordIdx + 1}` : null
+      });
+      if (menuItem) foundAny = true;
+    }
+  });
+
+  const fullItemsText = ordersList.map(o => o.items || '').join('\n');
+  const combinedRawTotal = ordersList.reduce((acc, o) => acc + (parseFloat(o.total_price) || 0), 0);
+
   // Calculate subtotal
   let subtotal = 0;
   if (foundAny) {
     subtotal = parsedItems.reduce((acc, pi) => acc + pi.total, 0);
   } else {
-    subtotal = order.total_price;
-    // back-calculate if discount was applied
-    if (itemsText.includes('Discount Applied')) {
+    subtotal = combinedRawTotal;
+    if (fullItemsText.includes('Discount Applied')) {
       const discountPercent = cafe?.discount_percentage || 20;
       subtotal = subtotal / (1 - (discountPercent / 100));
-    } else if (itemsText.includes('Voucher Applied')) {
+    } else if (fullItemsText.includes('Voucher Applied')) {
       subtotal = subtotal / 0.80;
     }
   }
 
   // Discount toggles
-  const hasDiscountInText = itemsText.includes('Discount Applied') || itemsText.includes('Voucher Applied');
+  const hasDiscountInText = fullItemsText.includes('Discount Applied') || fullItemsText.includes('Voucher Applied');
   const [isDiscountApplied, setIsDiscountApplied] = useState(hasDiscountInText);
   const [discountPercent, setDiscountPercent] = useState(() => {
-    if (itemsText.includes('Voucher Applied')) return 20;
+    if (fullItemsText.includes('Voucher Applied')) return 20;
     return cafe?.discount_percentage || 20;
   });
 
@@ -4593,16 +4609,16 @@ export function PrintBillModal({ order, cafe, menuItems, formatPrice, onClose, o
             
             <div className="bill-meta">
               <div className="bill-meta-row">
-                <span><strong>Invoice:</strong> #BILL-{order.id.toString().slice(-4)}</span>
-                <span><strong>Date:</strong> {new Date(order.created_at || Date.now()).toLocaleDateString()}</span>
+                <span><strong>Invoice:</strong> {isMultiOrderTab ? `#TAB-TBL${primaryTableNum}` : `#BILL-${(order.id || 0).toString().slice(-4)}`}</span>
+                <span><strong>Date:</strong> {new Date(ordersList[0]?.created_at || Date.now()).toLocaleDateString()}</span>
               </div>
               <div className="bill-meta-row">
-                <span><strong>Table:</strong> {order.table_number}</span>
-                <span><strong>Time:</strong> {new Date(order.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                <span><strong>Table:</strong> Table {primaryTableNum} {isMultiOrderTab ? `(${ordersList.length} Orders Merged)` : ''}</span>
+                <span><strong>Time:</strong> {new Date(ordersList[0]?.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
               </div>
               <div className="bill-meta-row">
                 <span><strong>Staff:</strong> {isWaiter ? 'Waiter Service' : 'Admin'}</span>
-                <span><strong>Status:</strong> {order.status.toUpperCase()}</span>
+                <span><strong>Status:</strong> {isMultiOrderTab ? 'RUNNING TAB' : (order.status || 'PENDING').toUpperCase()}</span>
               </div>
             </div>
 
@@ -4732,14 +4748,14 @@ export function PrintBillModal({ order, cafe, menuItems, formatPrice, onClose, o
               🖨️ Print Bill Receipt
             </button>
             
-            {onApproveDiscount && ['pending', 'preparing', 'ready', 'completed', 'bill_requested'].includes(order.status) && (
+            {onApproveDiscount && (
               <button 
                 type="button"
                 className="btn-primary" 
-                onClick={() => onApproveDiscount(order.id, isDiscountApplied, discountPercent, grandTotal)}
+                onClick={() => onApproveDiscount(order.id || ordersList[0]?.id, isDiscountApplied, discountPercent, grandTotal, ordersList)}
                 style={{ background: '#10b981', color: 'white' }}
               >
-                ✅ Approve & Close Order
+                {isMultiOrderTab ? `✅ Approve & Close Table ${primaryTableNum} Tab (${ordersList.length} Orders)` : '✅ Approve & Close Order'}
               </button>
             )}
 
