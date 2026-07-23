@@ -1085,21 +1085,34 @@ export default function CustomerView() {
     }
   }, [placedOrder, cafeId, resolvedTableId]);
 
-  // Load all active table orders for Running Table Tab
+  // Load all active table orders for Running Table Tab with persistent history fallback
   const loadTableOrders = async () => {
     if (!cafeId || !resolvedTableId) return;
     const targetCafeId = parseInt(cafeId);
-    const allOrders = await fetchOrders(targetCafeId);
-    if (allOrders && Array.isArray(allOrders)) {
-      const activeForTable = allOrders.filter(o => {
-        if (!o) return false;
-        // Keep served/completed items in running tab until final bill is approved!
-        if (o.status === 'bill_approved' || o.status === 'cancelled' || o.status === 'assistance_resolved') return false;
-        const oTable = String(o.table_number || '');
-        return oTable === String(resolvedTableId) || oTable === String(tableId);
-      });
-      setActiveTableOrders(activeForTable);
-    }
+    let allOrders = (await fetchOrders(targetCafeId)) || [];
+    
+    // Merge with local storage orders history to prevent ticket loss across page refreshes / mock mode
+    const historyKey = `placed_orders_history_cafe_${cafeId}_table_${resolvedTableId}`;
+    const localHistory = JSON.parse(localStorage.getItem(historyKey) || '[]');
+    
+    const mergedMap = {};
+    allOrders.forEach(o => { if (o && o.id) mergedMap[o.id] = o; });
+    localHistory.forEach(o => { if (o && o.id && !mergedMap[o.id]) mergedMap[o.id] = o; });
+    
+    const combinedList = Object.values(mergedMap);
+    
+    const activeForTable = combinedList.filter(o => {
+      if (!o) return false;
+      // Keep served/completed items in running tab until final bill is approved!
+      if (o.status === 'bill_approved' || o.status === 'cancelled' || o.status === 'assistance_resolved') return false;
+      const oTable = String(o.table_number || '').trim();
+      const rTable = String(resolvedTableId).trim();
+      const tTable = String(tableId || '').trim();
+      return oTable === rTable || oTable === tTable || oTable === `Table ${rTable}` || oTable === `Table ${tTable}`;
+    });
+
+    activeForTable.sort((a, b) => (a.id || 0) - (b.id || 0));
+    setActiveTableOrders(activeForTable);
   };
 
   useEffect(() => {
@@ -1326,7 +1339,15 @@ export default function CustomerView() {
           setShowFullCartDrawer(false);
           setShowMenuCatalogDuringTracking(false);
           window.scrollTo({ top: 0, behavior: 'smooth' });
+
+          // Store in table orders history array so tickets and cumulative tab amounts are never lost
+          const historyKey = `placed_orders_history_cafe_${cafeId}_table_${resolvedTableId}`;
+          const existingHistory = JSON.parse(localStorage.getItem(historyKey) || '[]');
+          const updatedHistory = [...existingHistory.filter(o => o.id !== newOrder.id), newOrder];
+          localStorage.setItem(historyKey, JSON.stringify(updatedHistory));
           localStorage.setItem(`placed_order_cafe_${cafeId}_table_${resolvedTableId}`, JSON.stringify(newOrder));
+          
+          loadTableOrders();
           setShowChoiceOverlay(true);
         }, 4000);
       } else {
@@ -1528,9 +1549,11 @@ export default function CustomerView() {
 
 
   const handleClearTracking = () => {
+    localStorage.removeItem(`placed_orders_history_cafe_${cafeId}_table_${resolvedTableId}`);
     localStorage.removeItem(`placed_order_cafe_${cafeId}_table_${resolvedTableId}`);
     setPlacedOrder(null);
     setOrderTracking(null);
+    setActiveTableOrders([]);
     setShowCancelConfirm(false);
   };
 
