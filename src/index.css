@@ -8955,3 +8955,247 @@ body[data-cv-theme="light"] .customer-page-root {
   border: 1px solid #cbd5e1 !important;
 }
 
+/* ============================================
+   UNIFIED ORDER OVERVIEW CARD (WIREFRAME STYLING)
+   ============================================ */
+.cv-order-overview-card {
+  margin: 16px 0;
+  padding: 18px 20px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1.5px solid rgba(0, 242, 254, 0.3);
+  border-radius: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+}
+
+[data-cv-theme="light"] .cv-order-overview-card {
+  background: #ffffff !important;
+  border-color: rgba(2, 132, 199, 0.4) !important;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.08) !important;
+}
+
+.overview-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.overview-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--text-heading, #ffffff);
+  letter-spacing: -0.01em;
+}
+
+/* Inline Coupon Row */
+.coupon-inline-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.coupon-input {
+  flex: 1;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(0, 0, 0, 0.2);
+  color: var(--text-main, #ffffff);
+  font-size: 0.88rem;
+  outline: none;
+}
+
+[data-cv-theme="light"] .coupon-input {
+  background: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+.btn-coupon-apply {
+  padding: 10px 18px;
+  border-radius: 10px;
+  border: none;
+  background: var(--customer-accent, #00f2fe);
+  color: #0b0f19;
+  font-weight: 700;
+  font-size: 0.88rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: transform 0.15s ease;
+}
+
+.btn-coupon-apply:hover {
+  transform: translateY(-1px);
+}
+
+.coupon-active-note {
+  margin: -6px 0 0 2px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #10b981;
+}
+
+/* Action buttons row: Req Bill | Add More | Games */
+.overview-actions-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.btn-overview-req-bill {
+  flex: 1;
+  padding: 11px 16px;
+  border-radius: 12px;
+  border: none;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: var(--text-main, #ffffff);
+  font-weight: 800;
+  font-size: 0.92rem;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.2s ease;
+}
+
+[data-cv-theme="light"] .btn-overview-req-bill {
+  background: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+.btn-overview-req-bill:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.btn-overview-add-more {
+  flex: 1;
+  padding: 11px 16px;
+  border-radius: 12px;
+  border: none;
+  background: rgba(0, 242, 254, 0.15);
+  border: 1.5px solid rgba(0, 242, 254, 0.4);
+  color: var(--customer-accent, #00f2fe);
+  font-weight: 800;
+  font-size: 0.92rem;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.2s ease;
+}
+
+[data-cv-theme="light"] .btn-overview-add-more {
+  background: rgba(2, 132, 199, 0.1) !important;
+  border-color: #0284c7 !important;
+  color: #0284c7 !important;
+}
+
+.btn-overview-add-more:hover {
+  transform: translateY(-1px);
+}
+
+.btn-overview-games {
+  padding: 11px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-main, #ffffff);
+  font-weight: 700;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+/* Total Bill Bar (Matching Wireframe Pill) */
+.overview-total-bill-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 18px;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1.5px solid rgba(16, 185, 129, 0.35);
+  border-radius: 14px;
+}
+
+[data-cv-theme="light"] .overview-total-bill-bar {
+  background: rgba(16, 185, 129, 0.08) !important;
+  border-color: rgba(16, 185, 129, 0.4) !important;
+}
+
+.total-bill-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.total-bill-label {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--text-heading, #ffffff);
+}
+
+[data-cv-theme="light"] .total-bill-label {
+  color: #020617 !important;
+}
+
+.total-bill-amount {
+  font-size: 1.35rem;
+  font-weight: 900;
+  color: #10b981;
+}
+
+.btn-toggle-bill-drawer {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(0, 0, 0, 0.2);
+  color: var(--text-main, #ffffff);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+[data-cv-theme="light"] .btn-toggle-bill-drawer {
+  background: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+.overview-breakdown-drawer {
+  margin-top: 4px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+[data-cv-theme="light"] .overview-breakdown-drawer {
+  background: #f1f5f9 !important;
+}
+
+.drawer-order-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding-bottom: 6px;
+}
+
+.drawer-item-top {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.drawer-item-names {
+  font-size: 0.85rem;
+  color: var(--text-main, #ffffff);
+}
+
+.drawer-item-subtotal {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #10b981;
+}
+

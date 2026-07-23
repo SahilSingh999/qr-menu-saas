@@ -1820,102 +1820,23 @@ export default function CustomerView() {
         </div>
       )}
 
-      {/* ── ACTIVE ORDER & RUNNING BILL CARD ── */}
-      {activeTableOrders.filter(o => o.status !== 'assistance_needed').length > 0 && (
-        <div className="cv-running-tab-banner glass-card animated-slide-down" style={{ margin: '14px 0', padding: '16px 20px', background: 'rgba(0, 242, 254, 0.08)', border: '1px solid rgba(0, 242, 254, 0.3)', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-            <div>
-              <h4 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--customer-accent, #00f2fe)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                🧾 Active Order & Bill — Table {tableId}
-                <span style={{ fontSize: '0.75rem', background: 'rgba(0, 242, 254, 0.2)', color: 'var(--text-heading, white)', padding: '2px 10px', borderRadius: '12px', fontWeight: 'bold' }}>
-                  {activeTableOrders.filter(o => o.status !== 'assistance_needed').length} {activeTableOrders.filter(o => o.status !== 'assistance_needed').length === 1 ? 'Order' : 'Orders Placed'}
-                </span>
-              </h4>
-              <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                You can add more items to your bill anytime below to update your order!
+      {/* ── UNIFIED ORDER OVERVIEW CARD (WIREFRAME MATCH) ── */}
+      {(orderTracking || activeTableOrders.filter(o => o.status !== 'assistance_needed').length > 0) && (
+        <div className="cv-order-overview-card glass-card animated-slide-down">
+          <div className="overview-card-header">
+            <h3 className="overview-title">Order overview</h3>
+            {orderTracking && (
+              <span className={`status-badge badge-${orderTracking.status}`}>
+                {orderTracking.status === 'completed' ? 'SERVED ✅' : orderTracking.status.replace(/_/g, ' ').toUpperCase()}
               </span>
-            </div>
-            <div style={{ textAlign: 'right' }}>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', fontWeight: 'bold' }}>UPDATED BILL TOTAL</span>
-              <strong style={{ fontSize: '1.4rem', color: '#10b981' }}>{formatPrice(runningTabTotal)}</strong>
-            </div>
+            )}
           </div>
 
-          {/* Breakdown Drawer */}
-          {showRunningTabDrawer && (
-            <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '12px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {activeTableOrders.filter(o => o.status !== 'assistance_needed').map((ord, idx) => (
-                <div key={ord.id} style={{ borderBottom: idx < activeTableOrders.length - 1 ? '1px solid rgba(255,255,255,0.08)' : 'none', paddingBottom: idx < activeTableOrders.length - 1 ? '8px' : '0' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', fontWeight: 'bold' }}>
-                    <span>Order #{idx + 1} ({new Date(ord.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})</span>
-                    <span className={`status-badge badge-${ord.status}`} style={{ fontSize: '0.7rem', padding: '2px 8px' }}>
-                      {ord.status.toUpperCase()}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: '0.88rem', color: 'var(--text-main)', marginTop: '3px' }}>
-                    {ord.items}
-                  </div>
-                  <div style={{ fontSize: '0.82rem', color: '#10b981', marginTop: '2px', fontWeight: 'bold' }}>
-                    Subtotal: {formatPrice(ord.total_price || 0)}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', flexWrap: 'wrap', marginTop: '2px' }}>
-            <button 
-              type="button" 
-              onClick={() => {
-                const catalogEl = document.querySelector('.cv-categories-bar') || document.querySelector('.cv-menu-grid');
-                if (catalogEl) {
-                  catalogEl.scrollIntoView({ behavior: 'smooth' });
-                }
-              }}
-              style={{ background: 'rgba(0, 242, 254, 0.15)', color: 'var(--customer-accent, #00f2fe)', border: '1px solid rgba(0, 242, 254, 0.3)', padding: '8px 14px', borderRadius: '10px', fontSize: '0.85rem', fontWeight: 'bold', cursor: 'pointer' }}
-            >
-              ➕ Add More Items To Bill
-            </button>
-
-            <button 
-              type="button" 
-              onClick={() => setShowRunningTabDrawer(!showRunningTabDrawer)}
-              style={{ background: 'rgba(255,255,255,0.08)', color: 'var(--text-main)', border: '1px solid rgba(255,255,255,0.15)', padding: '8px 12px', borderRadius: '10px', fontSize: '0.85rem', cursor: 'pointer' }}
-            >
-              {showRunningTabDrawer ? 'Hide Details ▲' : '📋 Bill Details ▼'}
-            </button>
-
-            <button 
-              type="button" 
-              onClick={() => setShowBillRequestModal(true)}
-              style={{ background: '#10b981', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '10px', fontSize: '0.85rem', fontWeight: 'bold', cursor: 'pointer' }}
-            >
-              💰 Request Bill & Pay
-            </button>
-          </div>
-        </div>
-      )}
-
-      {error && (
-        <div className="alert alert-error">
-          <p>{error}</p>
-        </div>
-      )}
-
-      {/* ── ORDER TRACKER ── */}
-      {orderTracking && (
-        <div className="order-tracker-panel glass-card">
-          <div className="tracker-header">
-            <h3>⏳ Your Order Status</h3>
-            <span className={`status-badge badge-${orderTracking.status}`}>
-              {orderTracking.status === 'completed' ? 'SERVED ✅' : orderTracking.status.replace(/_/g, ' ').toUpperCase()}
-            </span>
-          </div>
-
-          {/* 5-step progress bar */}
+          {/* 1. Status Progress Tracker Bar (5-step timeline dots) */}
           <div className="tracker-progress-bar-container">
             {STATUS_STEPS.map((step) => {
-              const filled = step.statuses.includes(orderTracking.status);
+              const currentStatus = orderTracking ? orderTracking.status : 'pending';
+              const filled = step.statuses.includes(currentStatus);
               return (
                 <div key={step.key} className={`progress-segment step-${step.key} ${filled ? 'filled' : ''}`}>
                   <span className="dot"></span>
@@ -1925,171 +1846,112 @@ export default function CustomerView() {
             })}
           </div>
 
-          {/* Status-specific notices */}
-          <div className="tracker-details">
-            <p><strong>Items:</strong> {orderTracking.items}</p>
-            <p><strong>Total:</strong> {formatPrice(orderTracking.total_price || 0)}</p>
+          {/* 2. Apply Coupon Row */}
+          <div className="coupon-inline-row">
+            <input 
+              type="text" 
+              className="coupon-input"
+              placeholder="Apply Coupon....." 
+              value={voucherInput} 
+              onChange={(e) => setVoucherInput(e.target.value.toUpperCase())}
+              disabled={voucherDiscount > 0}
+            />
+            <button 
+              type="button"
+              className="btn-coupon-apply"
+              onClick={handleApplyVoucher}
+              disabled={voucherDiscount > 0 || !voucherInput.trim()}
+            >
+              {voucherDiscount > 0 ? 'Applied ✓' : 'Apply'}
+            </button>
+          </div>
+          {voucherDiscount > 0 && (
+            <p className="coupon-active-note">
+              🎉 20% Discount active! Will be applied when you request the bill.
+            </p>
+          )}
 
-            {orderTracking.status === 'completed' && (
-              <div className="status-notice notice-served">
-                ✅ <strong>Order Served!</strong> Your food has been delivered to the table. Enjoy your meal!
-              </div>
-            )}
-            {orderTracking.status === 'cancelled' && (
-              <p className="cancelled-notice">⚠️ Your order was cancelled by the staff.</p>
-            )}
-            {orderTracking.status === 'delayed' && (
-              <p className="delay-notice">⚠️ <strong>Kitchen Delay:</strong> The kitchen is experiencing a slight delay. We are preparing your order as quickly as possible!</p>
-            )}
-            {orderTracking.status === 'unavailable' && (
-              <p className="unavailable-notice">❌ <strong>Item Shortage:</strong> One of your ordered items is currently out of stock. A staff member will visit you shortly to assist.</p>
-            )}
-            {orderTracking.status === 'bill_requested' && (
-              <div className="status-notice notice-checkout">
-                ✅ <strong>Checkout in progress!</strong> Your bill has been requested. Please wait while staff processes it.
-              </div>
-            )}
+          {/* 3. Action Buttons Row: Req Bill | Add More | Games */}
+          <div className="overview-actions-row">
+            <button 
+              type="button"
+              className="btn-overview-req-bill" 
+              onClick={() => setShowBillRequestModal(true)}
+            >
+              Req Bill
+            </button>
+
+            <button 
+              type="button"
+              className="btn-overview-add-more" 
+              onClick={() => {
+                const menuEl = document.querySelector('.cv-content-area') || document.querySelector('.cv-menu-section');
+                if (menuEl) {
+                  menuEl.scrollIntoView({ behavior: 'smooth' });
+                }
+              }}
+            >
+              Add More
+            </button>
+
+            <button 
+              type="button"
+              className="btn-overview-games"
+              onClick={() => setShowChoiceOverlay(true)}
+              title="Wait Experience Room & Games"
+            >
+              🎮 Games
+            </button>
           </div>
 
-          <div className="tracker-actions">
-            {orderTracking.status === 'completed' && !isCheckingOut ? (
-              <div className="tracker-buttons-split">
-                <button className="btn-place-another" onClick={handleClearTracking} style={{ background: 'transparent', border: '2px solid rgba(var(--customer-accent-rgb), 0.5)', color: 'var(--customer-accent)' }}>
-                  🍽️ Place order Again
-                </button>
-                <button className="btn-bill-cta" onClick={() => setIsCheckingOut(true)}>
-                  💰 Request Bill Now
-                </button>
-              </div>
-            ) : isCheckingOut && orderTracking.status !== 'bill_requested' ? (
-              <div className="tracker-buttons-checkout" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-                {/* Voucher code entry box */}
-                <div className="voucher-input-wrapper" style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-                  <input 
-                    type="text" 
-                    placeholder="Place the code from your last purchase if any" 
-                    value={voucherInput} 
-                    onChange={(e) => setVoucherInput(e.target.value.toUpperCase())}
-                    disabled={voucherDiscount > 0}
-                    style={{
-                      flex: 1,
-                      padding: '12px 16px',
-                      borderRadius: '12px',
-                      border: '1px solid var(--cv-card-border)',
-                      background: 'rgba(255,255,255,0.05)',
-                      color: 'inherit',
-                      fontSize: '0.85rem'
-                    }}
-                  />
-                  <button 
-                    className="btn-apply-discount"
-                    onClick={handleApplyVoucher}
-                    disabled={voucherDiscount > 0 || !voucherInput.trim()}
-                    style={{
-                      background: voucherDiscount > 0 ? '#10b981' : 'var(--customer-accent)',
-                      color: '#0b0f19'
-                    }}
-                  >
-                    {voucherDiscount > 0 ? 'Applied! ✓' : 'Apply Discount'}
-                  </button>
-                </div>
-                {voucherDiscount > 0 && (
-                  <p className="voucher-success-text" style={{ color: '#10b981', fontSize: '0.82rem', fontWeight: 600, margin: '0 0 12px 4px', textAlign: 'left' }}>
-                    🎉 Code active! 20% discount will be applied when you request the bill.
-                  </p>
-                )}
-
-                <div className="tracker-buttons-checkout-actions" style={{ display: 'flex', gap: '10px', width: '100%' }}>
-                  <button className="btn-games-cta" onClick={() => setShowBillRequestModal(true)} style={{ flex: 1, margin: 0 }}>
-                    📸 Sent Photos to get discount
-                  </button>
-                  <button className="btn-bill-cta" onClick={handleRequestBillNoPhotos} style={{ flex: '0 0 auto', width: 'auto', padding: '12px 20px', whiteSpace: 'nowrap', background: 'transparent', border: '2px solid rgba(var(--customer-accent-rgb), 0.5)', color: 'var(--customer-accent)' }}>
-                    Req bill
-                  </button>
-                </div>
-              </div>
-            ) : orderTracking.status === 'bill_requested' ? (
-              <div className="status-notice notice-success-checkout">
-                <h3>🎉 Complete!</h3>
-                <p>Please wait, our team is reaching out with your bill and physical/QR payment method.</p>
-                <p style={{ marginTop: '10px', fontWeight: 'bold' }}>Thanks and do visit again! ❤️</p>
-              </div>
-            ) : orderTracking.status === 'cancelled' ? (
-              <button className="btn-place-another" onClick={handleClearTracking}>
-                🍽️ Place Another Order
+          {/* 4. Total Bill Bar */}
+          <div className="overview-total-bill-bar">
+            <div className="total-bill-info">
+              <span className="total-bill-label">Total Bill</span>
+              <span className="total-bill-amount">
+                - {formatPrice(runningTabTotal > 0 ? runningTabTotal : (orderTracking?.total_price || 0))}
+              </span>
+            </div>
+            {activeTableOrders.length > 0 && (
+              <button 
+                type="button" 
+                className="btn-toggle-bill-drawer"
+                onClick={() => setShowRunningTabDrawer(!showRunningTabDrawer)}
+              >
+                {showRunningTabDrawer ? 'Hide Details ▲' : '📋 Breakdown ▼'}
               </button>
-            ) : (
-              <div className="tracker-buttons-row">
-                <button 
-                  className="btn-games-cta"
-                  onClick={() => setShowChoiceOverlay(true)}
-                >
-                  🎮 Wait Experience Room
-                </button>
-
-                <button 
-                  className="btn-bill-cta"
-                  onClick={() => setShowBillRequestModal(true)}
-                >
-                  💰 Request Bill
-                </button>
-
-                {/* Cancel Order — with mobile confirmation guard */}
-                {!showCancelConfirm ? (
-                  <button
-                    className="btn-cancel-order"
-                    onClick={() => setShowCancelConfirm(true)}
-                  >
-                    ✕ Cancel Order
-                  </button>
-                ) : (
-                  <div className="cancel-confirm-box animated-fade-in">
-                    <p className="cancel-confirm-text">⚠️ Are you sure you want to cancel your order?</p>
-                    <div className="cancel-confirm-actions">
-                      <button
-                        className="cancel-confirm-yes"
-                        onClick={handleClearTracking}
-                      >
-                        ✓ Yes, Cancel
-                      </button>
-                      <button
-                        className="cancel-confirm-no"
-                        onClick={() => setShowCancelConfirm(false)}
-                      >
-                        No, Keep Order
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
             )}
           </div>
+
+          {/* Itemized breakdown drawer when toggled */}
+          {showRunningTabDrawer && activeTableOrders.length > 0 && (
+            <div className="overview-breakdown-drawer">
+              {activeTableOrders.filter(o => o.status !== 'assistance_needed').map((ord, idx) => (
+                <div key={ord.id} className="drawer-order-item">
+                  <div className="drawer-item-top">
+                    <span>Order #{idx + 1} ({new Date(ord.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})</span>
+                    <span className={`status-badge badge-${ord.status}`}>{ord.status.toUpperCase()}</span>
+                  </div>
+                  <div className="drawer-item-names">{ord.items}</div>
+                  <div className="drawer-item-subtotal">Subtotal: {formatPrice(ord.total_price || 0)}</div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
-      {orderTracking && (
-        <div className="cv-view-menu-wrapper">
-          <button 
-            type="button"
-            className="cv-view-menu-btn" 
-            onClick={() => {
-              const next = !showMenuCatalogDuringTracking;
-              setShowMenuCatalogDuringTracking(next);
-              if (next) {
-                setTimeout(() => {
-                  window.scrollBy({ top: 350, behavior: 'smooth' });
-                }, 150);
-              }
-            }}
-          >
-            {showMenuCatalogDuringTracking ? '📖 Hide Menu Catalog' : '📖 View Menu & Order More'}
-          </button>
+      {error && (
+        <div className="alert alert-error">
+          <p>{error}</p>
         </div>
       )}
 
-      {/* ── MAIN CONTENT AREA (menu + inline cart) ── */}
-      {(!orderTracking || showMenuCatalogDuringTracking) && (
-        <div className="cv-content-area">
+      {/* ── MAIN CONTENT AREA (menu catalog is ALWAYS visible per wireframe) ── */}
+      <div className="cv-content-area">
+        <div className="cv-section-header-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+          <h2 style={{ fontSize: '1.4rem', fontWeight: 800, margin: 0, color: 'var(--text-heading)' }}>All items</h2>
+        </div>
 
           {/* ── MENU SECTION ── */}
           <div className="cv-menu-section">
@@ -2301,7 +2163,6 @@ export default function CustomerView() {
           </div>
 
         </div>
-      )}
 
       {/* ── MOBILE STICKY BOTTOM CART BAR (Image 2) ── */}
       {cart.length > 0 && !showFullCartDrawer && (
