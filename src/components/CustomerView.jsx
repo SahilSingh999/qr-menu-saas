@@ -1835,7 +1835,7 @@ export default function CustomerView() {
       {(orderTracking || activeTableOrders.filter(o => o.status !== 'assistance_needed').length > 0) && (
         <div className="cv-order-overview-card glass-card animated-slide-down">
           <div className="overview-card-header">
-            <h3 className="overview-title">Order overview</h3>
+            <h3 className="overview-title">Order Overview</h3>
             {activeTableOrders.filter(o => o.status !== 'assistance_needed').length > 0 && (
               <span className="status-badge" style={{ background: 'rgba(0, 242, 254, 0.15)', color: 'var(--customer-accent, #00f2fe)', border: '1px solid rgba(0, 242, 254, 0.3)', fontWeight: 800 }}>
                 {activeTableOrders.filter(o => o.status !== 'assistance_needed').length} {activeTableOrders.filter(o => o.status !== 'assistance_needed').length === 1 ? 'Ticket' : 'Tickets'} Active
@@ -1915,10 +1915,10 @@ export default function CustomerView() {
             </button>
           </div>
 
-          {/* 4. Final Combined Bill Bar */}
+          {/* 4. Final Combined Total Bar */}
           <div className="overview-total-bill-bar">
             <div className="total-bill-info">
-              <span className="total-bill-label">FINAL COMBINED TOTAL</span>
+              <span className="total-bill-label">TOTAL BILL</span>
               <strong className="total-bill-amount">
                 {formatPrice(runningTabTotal > 0 ? runningTabTotal : (orderTracking?.total_price || 0))}
               </strong>
@@ -1929,16 +1929,16 @@ export default function CustomerView() {
                 className="btn-toggle-bill-drawer"
                 onClick={() => setShowRunningTabDrawer(!showRunningTabDrawer)}
               >
-                {showRunningTabDrawer ? 'Hide ▲' : `📋 Itemized Tickets (${activeTableOrders.filter(o => o.status !== 'assistance_needed').length}) ▼`}
+                {showRunningTabDrawer ? 'Hide ▲' : `📋 Tickets (${activeTableOrders.filter(o => o.status !== 'assistance_needed').length}) ▼`}
               </button>
             )}
           </div>
 
-          {/* Itemized breakdown drawer when toggled or when multiple orders exist */}
-          {(showRunningTabDrawer || activeTableOrders.length > 1) && activeTableOrders.length > 0 && (
+          {/* Itemized breakdown drawer when toggled */}
+          {showRunningTabDrawer && activeTableOrders.length > 0 && (
             <div className="overview-breakdown-drawer">
-              <div className="drawer-header-summary" style={{ fontSize: '0.82rem', fontWeight: 800, color: 'var(--customer-accent)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                📋 ITEMIZED ORDER TICKETS ({activeTableOrders.filter(o => o.status !== 'assistance_needed').length} COMBINED):
+              <div className="drawer-header-summary" style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--customer-accent)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                📋 ITEMIZED TICKETS ({activeTableOrders.filter(o => o.status !== 'assistance_needed').length} COMBINED):
               </div>
               {activeTableOrders.filter(o => o.status !== 'assistance_needed').map((ord, idx) => (
                 <div key={ord.id} className="drawer-order-item">

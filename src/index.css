@@ -8984,27 +8984,28 @@ body[data-cv-theme="light"] .customer-page-root {
 
 .overview-title {
   margin: 0;
-  font-size: 1.25rem;
+  font-size: 1.15rem;
   font-weight: 800;
   color: var(--text-heading, #ffffff);
   letter-spacing: -0.01em;
+  white-space: nowrap;
 }
 
 /* Inline Coupon Row */
 .coupon-inline-row {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   align-items: center;
 }
 
 .coupon-input {
   flex: 1;
-  padding: 10px 14px;
+  padding: 10px 12px;
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.15);
   background: rgba(0, 0, 0, 0.2);
   color: var(--text-main, #ffffff);
-  font-size: 0.88rem;
+  font-size: 0.85rem;
   outline: none;
 }
 
@@ -9015,13 +9016,13 @@ body[data-cv-theme="light"] .customer-page-root {
 }
 
 .btn-coupon-apply {
-  padding: 10px 18px;
+  padding: 10px 16px;
   border-radius: 10px;
   border: none;
   background: var(--customer-accent, #00f2fe);
   color: #0b0f19;
   font-weight: 700;
-  font-size: 0.88rem;
+  font-size: 0.85rem;
   cursor: pointer;
   white-space: nowrap;
   transition: transform 0.15s ease;
@@ -9040,23 +9041,24 @@ body[data-cv-theme="light"] .customer-page-root {
 
 /* Action buttons row: Req Bill | Add More | Games */
 .overview-actions-row {
-  display: flex;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
   align-items: center;
 }
 
 .btn-overview-req-bill {
-  flex: 1;
-  padding: 11px 16px;
+  padding: 10px 12px;
   border-radius: 12px;
   border: none;
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.2);
   color: var(--text-main, #ffffff);
   font-weight: 800;
-  font-size: 0.92rem;
+  font-size: 0.88rem;
   cursor: pointer;
   text-align: center;
+  white-space: nowrap;
   transition: all 0.2s ease;
 }
 
@@ -9071,17 +9073,17 @@ body[data-cv-theme="light"] .customer-page-root {
 }
 
 .btn-overview-add-more {
-  flex: 1;
-  padding: 11px 16px;
+  padding: 10px 12px;
   border-radius: 12px;
   border: none;
   background: rgba(0, 242, 254, 0.15);
   border: 1.5px solid rgba(0, 242, 254, 0.4);
   color: var(--customer-accent, #00f2fe);
   font-weight: 800;
-  font-size: 0.92rem;
+  font-size: 0.88rem;
   cursor: pointer;
   text-align: center;
+  white-space: nowrap;
   transition: all 0.2s ease;
 }
 
@@ -9096,14 +9098,22 @@ body[data-cv-theme="light"] .customer-page-root {
 }
 
 .btn-overview-games {
-  padding: 11px 14px;
+  grid-column: span 2;
+  padding: 9px 12px;
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.15);
   background: rgba(255, 255, 255, 0.06);
   color: var(--text-main, #ffffff);
   font-weight: 700;
-  font-size: 0.88rem;
+  font-size: 0.85rem;
   cursor: pointer;
+  text-align: center;
+}
+
+[data-cv-theme="light"] .btn-overview-games {
+  background: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
 }
 
 /* Total Bill Bar (Matching Wireframe Pill) */
@@ -9111,7 +9121,7 @@ body[data-cv-theme="light"] .customer-page-root {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 18px;
+  padding: 10px 14px;
   background: rgba(16, 185, 129, 0.1);
   border: 1.5px solid rgba(16, 185, 129, 0.35);
   border-radius: 14px;
@@ -9124,22 +9134,25 @@ body[data-cv-theme="light"] .customer-page-root {
 
 .total-bill-info {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
 }
 
 .total-bill-label {
-  font-size: 1.05rem;
+  font-size: 0.72rem;
   font-weight: 800;
-  color: var(--text-heading, #ffffff);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted, #94a3b8);
 }
 
 [data-cv-theme="light"] .total-bill-label {
-  color: #020617 !important;
+  color: #475569 !important;
 }
 
 .total-bill-amount {
-  font-size: 1.35rem;
+  font-size: 1.25rem;
   font-weight: 900;
   color: #10b981;
 }
@@ -9150,13 +9163,16 @@ body[data-cv-theme="light"] .customer-page-root {
   border: 1px solid rgba(255, 255, 255, 0.15);
   background: rgba(0, 0, 0, 0.2);
   color: var(--text-main, #ffffff);
-  font-size: 0.8rem;
+  font-size: 0.78rem;
+  font-weight: 700;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 [data-cv-theme="light"] .btn-toggle-bill-drawer {
   background: #e2e8f0 !important;
   color: #0f172a !important;
+  border-color: #cbd5e1 !important;
 }
 
 .overview-breakdown-drawer {
@@ -9202,48 +9218,42 @@ body[data-cv-theme="light"] .customer-page-root {
 /* Mobile Responsiveness for Order Overview Card */
 @media (max-width: 480px) {
   .cv-order-overview-card {
-    padding: 14px 14px;
+    padding: 12px 12px;
     margin: 10px 0;
-    gap: 12px;
+    gap: 10px;
   }
 
-  .overview-actions-row {
-    flex-wrap: wrap;
+  .overview-title {
+    font-size: 1.1rem;
   }
 
   .btn-overview-req-bill,
   .btn-overview-add-more {
-    flex: 1 1 42%;
-    font-size: 0.85rem;
-    padding: 10px 10px;
+    font-size: 0.82rem;
+    padding: 9px 8px;
   }
 
   .btn-overview-games {
-    flex: 1 1 100%;
-    text-align: center;
-    padding: 9px 12px;
+    font-size: 0.82rem;
+    padding: 8px 10px;
   }
 
   .overview-total-bill-bar {
-    padding: 10px 14px;
-  }
-
-  .total-bill-label {
-    font-size: 0.95rem;
-  }
-
-  .total-bill-amount {
-    font-size: 1.2rem;
-  }
-
-  .coupon-input {
-    font-size: 0.82rem;
     padding: 8px 12px;
   }
 
+  .total-bill-amount {
+    font-size: 1.15rem;
+  }
+
+  .coupon-input {
+    font-size: 0.8rem;
+    padding: 8px 10px;
+  }
+
   .btn-coupon-apply {
-    padding: 8px 14px;
-    font-size: 0.82rem;
+    padding: 8px 12px;
+    font-size: 0.8rem;
   }
 }
 
