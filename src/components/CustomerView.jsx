@@ -1831,22 +1831,22 @@ export default function CustomerView() {
         </div>
       )}
 
-      {/* ── UNIFIED ORDER OVERVIEW CARD (WIREFRAME MATCH) ── */}
+      {/* ── UNIFIED ORDER OVERVIEW CARD (OPTION 1 — MOBILE OPTIMIZED) ── */}
       {(orderTracking || activeTableOrders.filter(o => o.status !== 'assistance_needed').length > 0) && (
         <div className="cv-order-overview-card glass-card animated-slide-down">
           <div className="overview-card-header">
             <h3 className="overview-title">Order overview</h3>
-            {orderTracking && (
-              <span className={`status-badge badge-${orderTracking.status}`}>
-                {orderTracking.status === 'completed' ? 'SERVED ✅' : orderTracking.status.replace(/_/g, ' ').toUpperCase()}
+            {activeTableOrders.filter(o => o.status !== 'assistance_needed').length > 0 && (
+              <span className="status-badge" style={{ background: 'rgba(0, 242, 254, 0.15)', color: 'var(--customer-accent, #00f2fe)', border: '1px solid rgba(0, 242, 254, 0.3)', fontWeight: 800 }}>
+                {activeTableOrders.filter(o => o.status !== 'assistance_needed').length} {activeTableOrders.filter(o => o.status !== 'assistance_needed').length === 1 ? 'Ticket' : 'Tickets'} Active
               </span>
             )}
           </div>
 
-          {/* 1. Status Progress Tracker Bar (5-step timeline dots) */}
+          {/* 1. Status Progress Tracker Bar (5-step timeline dots for latest order) */}
           <div className="tracker-progress-bar-container">
             {STATUS_STEPS.map((step) => {
-              const currentStatus = orderTracking ? orderTracking.status : 'pending';
+              const currentStatus = orderTracking ? orderTracking.status : (activeTableOrders[activeTableOrders.length - 1]?.status || 'pending');
               const filled = step.statuses.includes(currentStatus);
               return (
                 <div key={step.key} className={`progress-segment step-${step.key} ${filled ? 'filled' : ''}`}>
@@ -1862,7 +1862,7 @@ export default function CustomerView() {
             <input 
               type="text" 
               className="coupon-input"
-              placeholder="Apply Coupon....." 
+              placeholder="Apply Coupon Code....." 
               value={voucherInput} 
               onChange={(e) => setVoucherInput(e.target.value.toUpperCase())}
               disabled={voucherDiscount > 0}
@@ -1878,18 +1878,18 @@ export default function CustomerView() {
           </div>
           {voucherDiscount > 0 && (
             <p className="coupon-active-note">
-              🎉 20% Discount active! Will be applied when you request the bill.
+              🎉 20% Discount active! Will be applied to your final bill.
             </p>
           )}
 
-          {/* 3. Action Buttons Row: Req Bill | Add More | Games */}
+          {/* 3. Action Buttons Row: Req Final Bill | Add More Items | Games */}
           <div className="overview-actions-row">
             <button 
               type="button"
               className="btn-overview-req-bill" 
               onClick={() => setShowBillRequestModal(true)}
             >
-              Req Bill
+              💰 Req Final Bill
             </button>
 
             <button 
@@ -1902,7 +1902,7 @@ export default function CustomerView() {
                 }
               }}
             >
-              Add More
+              ➕ Add More Items
             </button>
 
             <button 
@@ -1915,13 +1915,13 @@ export default function CustomerView() {
             </button>
           </div>
 
-          {/* 4. Total Bill Bar */}
+          {/* 4. Final Combined Bill Bar */}
           <div className="overview-total-bill-bar">
             <div className="total-bill-info">
-              <span className="total-bill-label">Total Bill</span>
-              <span className="total-bill-amount">
-                - {formatPrice(runningTabTotal > 0 ? runningTabTotal : (orderTracking?.total_price || 0))}
-              </span>
+              <span className="total-bill-label">FINAL COMBINED TOTAL</span>
+              <strong className="total-bill-amount">
+                {formatPrice(runningTabTotal > 0 ? runningTabTotal : (orderTracking?.total_price || 0))}
+              </strong>
             </div>
             {activeTableOrders.length > 0 && (
               <button 
@@ -1929,7 +1929,7 @@ export default function CustomerView() {
                 className="btn-toggle-bill-drawer"
                 onClick={() => setShowRunningTabDrawer(!showRunningTabDrawer)}
               >
-                {showRunningTabDrawer ? 'Hide Details ▲' : '📋 Breakdown ▼'}
+                {showRunningTabDrawer ? 'Hide ▲' : `📋 Itemized Tickets (${activeTableOrders.filter(o => o.status !== 'assistance_needed').length}) ▼`}
               </button>
             )}
           </div>
@@ -1938,12 +1938,12 @@ export default function CustomerView() {
           {(showRunningTabDrawer || activeTableOrders.length > 1) && activeTableOrders.length > 0 && (
             <div className="overview-breakdown-drawer">
               <div className="drawer-header-summary" style={{ fontSize: '0.82rem', fontWeight: 800, color: 'var(--customer-accent)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                📋 MERGED ORDER BREAKDOWN ({activeTableOrders.filter(o => o.status !== 'assistance_needed').length} {activeTableOrders.filter(o => o.status !== 'assistance_needed').length === 1 ? 'ORDER' : 'ORDERS'} COMBINED):
+                📋 ITEMIZED ORDER TICKETS ({activeTableOrders.filter(o => o.status !== 'assistance_needed').length} COMBINED):
               </div>
               {activeTableOrders.filter(o => o.status !== 'assistance_needed').map((ord, idx) => (
                 <div key={ord.id} className="drawer-order-item">
                   <div className="drawer-item-top">
-                    <span>{idx === 0 ? '🛒 Initial Order (#1)' : `➕ Add-on Order (#${idx + 1})`} • {new Date(ord.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    <span>{idx === 0 ? '☕ Ticket #1 (Initial Order)' : `🍕 Ticket #${idx + 1} (Add-on Order)`} • {new Date(ord.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                     <span className={`status-badge badge-${ord.status}`}>{ord.status.toUpperCase()}</span>
                   </div>
                   <div className="drawer-item-names">{ord.items}</div>
