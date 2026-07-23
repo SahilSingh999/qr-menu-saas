@@ -8902,3 +8902,56 @@ body[data-cv-theme="light"] .customer-page-root {
   }
 }
 
+/* ============================================
+   LIGHT MODE HIGH CONTRAST & ACCESSIBILITY ENHANCEMENTS
+   ============================================ */
+[data-cv-theme="light"], [data-theme="light"] {
+  --bg-primary: #f8fafc;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #f1f5f9;
+  --text-main: #0f172a;
+  --text-muted: #475569;
+  --text-secondary: #1e293b;
+  --text-heading: #020617;
+  --glass-bg: #ffffff;
+  --glass-border: rgba(15, 23, 42, 0.15);
+  --input-bg: #f8fafc;
+  --customer-accent: #0284c7;
+}
+
+[data-cv-theme="light"] .cv-hero,
+[data-cv-theme="light"] .glass-card,
+[data-cv-theme="light"] .cv-running-tab-banner,
+[data-cv-theme="light"] .bill-request-card,
+[data-cv-theme="light"] .customer-container {
+  color: #0f172a !important;
+  background: #ffffff !important;
+  border-color: rgba(15, 23, 42, 0.15) !important;
+}
+
+[data-cv-theme="light"] .cv-cafe-name,
+[data-cv-theme="light"] .cv-table-num,
+[data-cv-theme="light"] h1, 
+[data-cv-theme="light"] h2, 
+[data-cv-theme="light"] h3, 
+[data-cv-theme="light"] h4 {
+  color: #020617 !important;
+}
+
+[data-cv-theme="light"] p,
+[data-cv-theme="light"] span,
+[data-cv-theme="light"] label {
+  color: #1e293b;
+}
+
+[data-cv-theme="light"] .cv-table-badge {
+  background: #e2e8f0 !important;
+  border-color: #cbd5e1 !important;
+}
+
+[data-cv-theme="light"] .cv-theme-toggle {
+  background: #e2e8f0 !important;
+  color: #0f172a !important;
+  border: 1px solid #cbd5e1 !important;
+}
+

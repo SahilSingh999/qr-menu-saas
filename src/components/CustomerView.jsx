@@ -1667,18 +1667,24 @@ export default function CustomerView() {
         </div>
       )}
 
-      {/* UGC Experience Photo Modal */}
+      {/* Bill Request & UGC Photo Modal */}
       {showBillRequestModal && (
         <div className="verification-overlay-fullscreen glass-blur animated-fade-in">
-          <div className="bill-request-card glass-card animated-zoom-in">
-            <div className="bill-request-header">
-              <h2>📸 Share Experience & Request Bill</h2>
-              <p>Upload up to 3 dining photos (compressed client-side) to request your bill and unlock a reward voucher code!</p>
+          <div className="bill-request-card glass-card animated-zoom-in" style={{ maxWidth: '440px', width: '92%' }}>
+            <div className="bill-request-header" style={{ textAlign: 'center', marginBottom: '16px' }}>
+              <h2 style={{ margin: '0 0 6px 0', fontSize: '1.3rem' }}>🧾 Request Final Bill & Pay</h2>
+              <div style={{ background: 'rgba(16, 185, 129, 0.12)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '10px', padding: '8px 14px', margin: '8px 0 12px 0' }}>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block' }}>UPDATED BILL TOTAL</span>
+                <strong style={{ fontSize: '1.4rem', color: '#10b981' }}>{formatPrice(runningTabTotal || orderTracking?.total_price || 0)}</strong>
+              </div>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0 }}>
+                Optionally upload up to 3 dining photos to unlock extra reward discounts, or request your standard bill directly!
+              </p>
             </div>
             
-            <div className="bill-upload-section">
-              <label className="btn-file-select-ugc">
-                <span>➕ Select Dining Photos ({billPhotos.length}/3)</span>
+            <div className="bill-upload-section" style={{ background: 'rgba(0,0,0,0.15)', borderRadius: '12px', padding: '14px', marginBottom: '16px' }}>
+              <label className="btn-file-select-ugc" style={{ cursor: 'pointer', display: 'block', textAlign: 'center' }}>
+                <span>📸 Select Dining Photos ({billPhotos.length}/3) - For Discount</span>
                 <input 
                   type="file" 
                   accept="image/*" 
@@ -1690,7 +1696,7 @@ export default function CustomerView() {
               </label>
 
               {billPhotosPreviews.length > 0 && (
-                <div className="bill-previews-grid">
+                <div className="bill-previews-grid" style={{ marginTop: '10px' }}>
                   {billPhotosPreviews.map((src, idx) => (
                     <div key={idx} className="bill-preview-item">
                       <img src={src} alt="Dining Experience Preview" />
@@ -1708,14 +1714,27 @@ export default function CustomerView() {
               )}
             </div>
 
-            <div className="bill-modal-actions">
-              <button 
-                className="btn-bill-cta" 
-                onClick={handleSubmitBillRequest}
-                disabled={billPhotos.length === 0 || uploadingBill}
-              >
-                {uploadingBill ? 'Uploading & Compressing...' : '💰 Submit UGC & Request Bill'}
-              </button>
+            <div className="bill-modal-actions" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {billPhotos.length > 0 ? (
+                <button 
+                  className="btn-bill-cta" 
+                  onClick={handleSubmitBillRequest}
+                  disabled={uploadingBill}
+                  style={{ background: '#10b981', color: 'white', padding: '12px', borderRadius: '10px', fontWeight: 'bold', fontSize: '0.95rem' }}
+                >
+                  {uploadingBill ? 'Uploading & Compressing...' : '📸 Submit Photos & Request Discount Bill'}
+                </button>
+              ) : (
+                <button 
+                  type="button"
+                  className="btn-bill-cta" 
+                  onClick={handleRequestBillNoPhotos}
+                  style={{ background: '#10b981', color: 'white', padding: '12px', borderRadius: '10px', fontWeight: 'bold', fontSize: '0.95rem', cursor: 'pointer' }}
+                >
+                  ⚡ Request Standard Bill & Pay (No Photos)
+                </button>
+              )}
+
               <button 
                 className="btn-cancel-order" 
                 onClick={() => {
@@ -1724,6 +1743,7 @@ export default function CustomerView() {
                   setBillPhotosPreviews([]);
                 }}
                 disabled={uploadingBill}
+                style={{ padding: '10px', borderRadius: '10px', background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', color: 'var(--text-muted)' }}
               >
                 Cancel
               </button>
@@ -1800,42 +1820,42 @@ export default function CustomerView() {
         </div>
       )}
 
-      {/* ── RUNNING TABLE TAB BANNER ── */}
+      {/* ── ACTIVE ORDER & RUNNING BILL CARD ── */}
       {activeTableOrders.filter(o => o.status !== 'assistance_needed').length > 0 && (
-        <div className="cv-running-tab-banner glass-card animated-slide-down" style={{ margin: '14px 0', padding: '14px 18px', background: 'rgba(0, 242, 254, 0.08)', border: '1px solid rgba(0, 242, 254, 0.3)', borderRadius: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        <div className="cv-running-tab-banner glass-card animated-slide-down" style={{ margin: '14px 0', padding: '16px 20px', background: 'rgba(0, 242, 254, 0.08)', border: '1px solid rgba(0, 242, 254, 0.3)', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
             <div>
-              <h4 style={{ margin: 0, fontSize: '1.05rem', color: '#00f2fe', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                🔥 Running Table Tab Active
-                <span style={{ fontSize: '0.75rem', background: 'rgba(0, 242, 254, 0.2)', color: 'white', padding: '2px 8px', borderRadius: '10px', fontWeight: 'bold' }}>
-                  {activeTableOrders.filter(o => o.status !== 'assistance_needed').length} {activeTableOrders.filter(o => o.status !== 'assistance_needed').length === 1 ? 'Order' : 'Orders'}
+              <h4 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--customer-accent, #00f2fe)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                🧾 Active Order & Bill — Table {tableId}
+                <span style={{ fontSize: '0.75rem', background: 'rgba(0, 242, 254, 0.2)', color: 'var(--text-heading, white)', padding: '2px 10px', borderRadius: '12px', fontWeight: 'bold' }}>
+                  {activeTableOrders.filter(o => o.status !== 'assistance_needed').length} {activeTableOrders.filter(o => o.status !== 'assistance_needed').length === 1 ? 'Order' : 'Orders Placed'}
                 </span>
               </h4>
-              <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-                All add-on orders placed at Table {tableId} automatically group into your running tab.
+              <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                You can add more items to your bill anytime below to update your order!
               </span>
             </div>
             <div style={{ textAlign: 'right' }}>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>TOTAL TAB BALANCE</span>
-              <strong style={{ fontSize: '1.3rem', color: '#10b981' }}>{formatPrice(runningTabTotal)}</strong>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', fontWeight: 'bold' }}>UPDATED BILL TOTAL</span>
+              <strong style={{ fontSize: '1.4rem', color: '#10b981' }}>{formatPrice(runningTabTotal)}</strong>
             </div>
           </div>
 
           {/* Breakdown Drawer */}
           {showRunningTabDrawer && (
-            <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '10px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
+            <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '12px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {activeTableOrders.filter(o => o.status !== 'assistance_needed').map((ord, idx) => (
-                <div key={ord.id} style={{ borderBottom: idx < activeTableOrders.length - 1 ? '1px solid rgba(255,255,255,0.06)' : 'none', paddingBottom: idx < activeTableOrders.length - 1 ? '6px' : '0' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', fontWeight: 'bold' }}>
-                    <span>Order #${idx + 1} ({new Date(ord.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})</span>
-                    <span className={`status-badge badge-${ord.status}`} style={{ fontSize: '0.7rem', padding: '1px 6px' }}>
+                <div key={ord.id} style={{ borderBottom: idx < activeTableOrders.length - 1 ? '1px solid rgba(255,255,255,0.08)' : 'none', paddingBottom: idx < activeTableOrders.length - 1 ? '8px' : '0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', fontWeight: 'bold' }}>
+                    <span>Order #{idx + 1} ({new Date(ord.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})</span>
+                    <span className={`status-badge badge-${ord.status}`} style={{ fontSize: '0.7rem', padding: '2px 8px' }}>
                       {ord.status.toUpperCase()}
                     </span>
                   </div>
-                  <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)', marginTop: '2px' }}>
+                  <div style={{ fontSize: '0.88rem', color: 'var(--text-main)', marginTop: '3px' }}>
                     {ord.items}
                   </div>
-                  <div style={{ fontSize: '0.8rem', color: '#10b981', marginTop: '2px' }}>
+                  <div style={{ fontSize: '0.82rem', color: '#10b981', marginTop: '2px', fontWeight: 'bold' }}>
                     Subtotal: {formatPrice(ord.total_price || 0)}
                   </div>
                 </div>
@@ -1843,18 +1863,32 @@ export default function CustomerView() {
             </div>
           )}
 
-          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '4px' }}>
+          <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', flexWrap: 'wrap', marginTop: '2px' }}>
+            <button 
+              type="button" 
+              onClick={() => {
+                const catalogEl = document.querySelector('.cv-categories-bar') || document.querySelector('.cv-menu-grid');
+                if (catalogEl) {
+                  catalogEl.scrollIntoView({ behavior: 'smooth' });
+                }
+              }}
+              style={{ background: 'rgba(0, 242, 254, 0.15)', color: 'var(--customer-accent, #00f2fe)', border: '1px solid rgba(0, 242, 254, 0.3)', padding: '8px 14px', borderRadius: '10px', fontSize: '0.85rem', fontWeight: 'bold', cursor: 'pointer' }}
+            >
+              ➕ Add More Items To Bill
+            </button>
+
             <button 
               type="button" 
               onClick={() => setShowRunningTabDrawer(!showRunningTabDrawer)}
-              style={{ background: 'rgba(255,255,255,0.08)', color: 'var(--text-primary)', border: '1px solid rgba(255,255,255,0.15)', padding: '6px 12px', borderRadius: '8px', fontSize: '0.8rem', cursor: 'pointer' }}
+              style={{ background: 'rgba(255,255,255,0.08)', color: 'var(--text-main)', border: '1px solid rgba(255,255,255,0.15)', padding: '8px 12px', borderRadius: '10px', fontSize: '0.85rem', cursor: 'pointer' }}
             >
-              {showRunningTabDrawer ? 'Hide Tab Details ▲' : '📋 View Tab Breakdown ▼'}
+              {showRunningTabDrawer ? 'Hide Details ▲' : '📋 Bill Details ▼'}
             </button>
+
             <button 
               type="button" 
               onClick={() => setShowBillRequestModal(true)}
-              style={{ background: '#10b981', color: 'white', border: 'none', padding: '6px 14px', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 'bold', cursor: 'pointer' }}
+              style={{ background: '#10b981', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '10px', fontSize: '0.85rem', fontWeight: 'bold', cursor: 'pointer' }}
             >
               💰 Request Bill & Pay
             </button>

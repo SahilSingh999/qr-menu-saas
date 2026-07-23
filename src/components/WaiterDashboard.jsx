@@ -842,49 +842,6 @@ export default function WaiterDashboard() {
             );
           })()}
 
-                  {/* View Mode Toggle: Running Table Tabs vs Individual Tickets */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '0 0 14px 0', flexWrap: 'wrap', gap: '10px' }}>
-            <div style={{ display: 'flex', gap: '8px', background: 'rgba(0,0,0,0.25)', padding: '4px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.08)' }}>
-              <button 
-                type="button" 
-                onClick={() => {
-                  setDashboardViewMode('tabs');
-                  setStatusFilter('active');
-                }}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: '10px',
-                  border: 'none',
-                  background: dashboardViewMode === 'tabs' ? 'var(--customer-accent, #00f2fe)' : 'transparent',
-                  color: dashboardViewMode === 'tabs' ? '#000' : 'var(--text-primary)',
-                  fontWeight: 'bold',
-                  fontSize: '0.85rem',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease'
-                }}
-              >
-                📋 Running Table Tabs ({getRunningTabs(orders, selectedCafe?.table_merges).length})
-              </button>
-              <button 
-                type="button" 
-                onClick={() => setDashboardViewMode('tickets')}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: '10px',
-                  border: 'none',
-                  background: dashboardViewMode === 'tickets' ? 'var(--customer-accent, #00f2fe)' : 'transparent',
-                  color: dashboardViewMode === 'tickets' ? '#000' : 'var(--text-primary)',
-                  fontWeight: 'bold',
-                  fontSize: '0.85rem',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease'
-                }}
-              >
-                🎟️ Individual Order Tickets ({orders.filter(o => o.status !== 'completed' && o.status !== 'cancelled' && o.status !== 'bill_approved').length})
-              </button>
-            </div>
-          </div>
-
           {/* Status Tab Filters */}
           <div className="waiter-filters">
             <button 
@@ -903,165 +860,68 @@ export default function WaiterDashboard() {
             </button>
             <button 
               className={`filter-btn ${statusFilter === 'pending' ? 'active' : ''}`}
-              onClick={() => { setStatusFilter('pending'); setDashboardViewMode('tickets'); }}
+              onClick={() => setStatusFilter('pending')}
             >
               📥 Pending ({orders.filter(o => o.status === 'pending').length})
             </button>
             <button 
               className={`filter-btn ${statusFilter === 'preparing' ? 'active' : ''}`}
-              onClick={() => { setStatusFilter('preparing'); setDashboardViewMode('tickets'); }}
+              onClick={() => setStatusFilter('preparing')}
             >
               👨‍🍳 Cooking ({orders.filter(o => o.status === 'preparing').length})
             </button>
             <button 
               className={`filter-btn ${statusFilter === 'ready' ? 'active' : ''}`}
-              onClick={() => { setStatusFilter('ready'); setDashboardViewMode('tickets'); }}
+              onClick={() => setStatusFilter('ready')}
             >
               🛎️ Ready ({orders.filter(o => o.status === 'ready').length})
             </button>
             <button 
               className={`filter-btn ${statusFilter === 'bill_requested' ? 'active' : ''}`}
-              onClick={() => { setStatusFilter('bill_requested'); setDashboardViewMode('tickets'); }}
+              onClick={() => setStatusFilter('bill_requested')}
             >
               💵 Bills ({orders.filter(o => o.status === 'bill_requested').length})
             </button>
             <button 
               className={`filter-btn ${statusFilter === 'bill_approved' ? 'active' : ''}`}
-              onClick={() => { setStatusFilter('bill_approved'); setDashboardViewMode('tickets'); }}
+              onClick={() => setStatusFilter('bill_approved')}
             >
               ✅ Approved ({orders.filter(o => o.status === 'bill_approved').length})
             </button>
             <button 
               className={`filter-btn ${statusFilter === 'delayed' ? 'active' : ''}`}
-              onClick={() => { setStatusFilter('delayed'); setDashboardViewMode('tickets'); }}
+              onClick={() => setStatusFilter('delayed')}
             >
               ⚠️ Delays ({orders.filter(o => o.status === 'delayed').length})
             </button>
             <button 
               className={`filter-btn ${statusFilter === 'unavailable' ? 'active' : ''}`}
-              onClick={() => { setStatusFilter('unavailable'); setDashboardViewMode('tickets'); }}
+              onClick={() => setStatusFilter('unavailable')}
             >
               ❌ Out of Stock ({orders.filter(o => o.status === 'unavailable').length})
             </button>
             <button 
               className={`filter-btn ${statusFilter === 'completed' ? 'active' : ''}`}
-              onClick={() => { setStatusFilter('completed'); setDashboardViewMode('tickets'); }}
+              onClick={() => setStatusFilter('completed')}
             >
               Served
             </button>
             <button 
               className={`filter-btn ${statusFilter === 'cancelled' ? 'active' : ''}`}
-              onClick={() => { setStatusFilter('cancelled'); setDashboardViewMode('tickets'); }}
+              onClick={() => setStatusFilter('cancelled')}
             >
               Cancelled
             </button>
           </div>
 
-          {/* Running Table Tabs Mode View */}
-          {dashboardViewMode === 'tabs' && statusFilter === 'active' ? (
-            (() => {
-              const activeTabs = getRunningTabs(orders, selectedCafe?.table_merges);
-              if (activeTabs.length === 0) {
-                return (
-                  <div className="empty-state-waiter glass-card">
-                    <span className="empty-icon">🍽️</span>
-                    <h3>No active running table tabs</h3>
-                    <p>When customers scan table QR codes and place orders, active table tabs will automatically group here with running bills.</p>
-                  </div>
-                );
-              }
-              return (
-                <div className="waiter-orders-grid">
-                  {activeTabs.map(tab => (
-                    <div key={`tab-${tab.primaryTable}`} className="order-card glass-card animated-zoom-in" style={{ borderLeft: '4px solid var(--customer-accent, #00f2fe)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                      <div className="order-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div>
-                          <h3 style={{ margin: 0, fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            🏷️ Table {tab.primaryTable}
-                            {tab.tablesInTab.length > 1 && (
-                              <span style={{ fontSize: '0.75rem', background: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', padding: '2px 8px', borderRadius: '6px' }}>
-                                Merged: T{tab.tablesInTab.join(', T')}
-                              </span>
-                            )}
-                          </h3>
-                          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                            {tab.orders.length} {tab.orders.length === 1 ? 'Order' : 'Orders (Add-ons Merged)'} • {tab.itemCount} Items
-                          </span>
-                        </div>
-                        <span className="status-badge badge-pending" style={{ background: 'rgba(0, 242, 254, 0.15)', color: '#00f2fe', border: '1px solid rgba(0, 242, 254, 0.3)' }}>
-                          RUNNING TAB
-                        </span>
-                      </div>
-
-                      {/* Add-on Orders Breakdown List */}
-                      <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '10px', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {tab.orders.map((ord, idx) => (
-                          <div key={ord.id} style={{ borderBottom: idx < tab.orders.length - 1 ? '1px solid rgba(255,255,255,0.06)' : 'none', paddingBottom: idx < tab.orders.length - 1 ? '6px' : '0' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--text-secondary)', marginBottom: '2px' }}>
-                              <span>Add-on Order #{idx + 1} ({new Date(ord.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})</span>
-                              <span className={`status-badge badge-${ord.status}`} style={{ fontSize: '0.7rem', padding: '1px 6px' }}>
-                                {ord.status.toUpperCase()}
-                              </span>
-                            </div>
-                            <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)', whiteSpace: 'pre-line' }}>
-                              {ord.items}
-                            </div>
-                            <div style={{ fontSize: '0.8rem', color: 'var(--customer-accent, #00f2fe)', marginTop: '2px' }}>
-                              Subtotal: {formatPrice(ord.total_price || 0)}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-
-                      {/* Cumulative Total & Action Bar */}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '8px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-                        <div>
-                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>TOTAL RUNNING BILL</span>
-                          <strong style={{ fontSize: '1.3rem', color: '#10b981' }}>{formatPrice(tab.totalPrice)}</strong>
-                        </div>
-
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button
-                            type="button"
-                            className="btn-select"
-                            onClick={() => {
-                              setSelectedOrderForBill({
-                                id: tab.orders[0].id,
-                                table_number: tab.primaryTable,
-                                total_price: tab.totalPrice,
-                                tabOrders: tab.orders,
-                                items: formatTabConsolidatedItems(tab.orders),
-                                status: tab.orders[0].status
-                              });
-                            }}
-                            style={{ background: '#3b82f6', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '8px', fontWeight: 'bold', fontSize: '0.85rem', cursor: 'pointer' }}
-                          >
-                            🖨️ Unified Bill
-                          </button>
-                          <button
-                            type="button"
-                            className="btn-primary"
-                            onClick={() => handleApproveBillWithDetails(tab.orders[0].id, false, 0, tab.totalPrice, tab.orders)}
-                            style={{ background: '#10b981', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '8px', fontWeight: 'bold', fontSize: '0.85rem', cursor: 'pointer' }}
-                          >
-                            ✅ Approve Tab
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              );
-            })()
+          {/* Orders Grid Display */}
+          {filteredOrders.length === 0 ? (
+            <div className="empty-state-waiter glass-card">
+              <span className="empty-icon">🍽️</span>
+              <h3>No orders match this status</h3>
+              <p>New orders submitted by customers will appear here instantly in real-time.</p>
+            </div>
           ) : (
-            /* Orders Grid Display for Individual Tickets */
-            filteredOrders.length === 0 ? (
-              <div className="empty-state-waiter glass-card">
-                <span className="empty-icon">🍽️</span>
-                <h3>No orders match this status</h3>
-                <p>New orders submitted by customers will appear here instantly in real-time.</p>
-              </div>
-            ) : (
               <div className="waiter-orders-grid">
               {filteredOrders.map(order => (
                 <div key={order.id} className={`waiter-order-card card-status-${order.status} glass-card`}>
@@ -1273,7 +1133,7 @@ export default function WaiterDashboard() {
                 </div>
               ))}
             </div>
-          ))}
+          )}
         </div>
       )}
 
