@@ -9199,3 +9199,51 @@ body[data-cv-theme="light"] .customer-page-root {
   color: #10b981;
 }
 
+/* Mobile Responsiveness for Order Overview Card */
+@media (max-width: 480px) {
+  .cv-order-overview-card {
+    padding: 14px 14px;
+    margin: 10px 0;
+    gap: 12px;
+  }
+
+  .overview-actions-row {
+    flex-wrap: wrap;
+  }
+
+  .btn-overview-req-bill,
+  .btn-overview-add-more {
+    flex: 1 1 42%;
+    font-size: 0.85rem;
+    padding: 10px 10px;
+  }
+
+  .btn-overview-games {
+    flex: 1 1 100%;
+    text-align: center;
+    padding: 9px 12px;
+  }
+
+  .overview-total-bill-bar {
+    padding: 10px 14px;
+  }
+
+  .total-bill-label {
+    font-size: 0.95rem;
+  }
+
+  .total-bill-amount {
+    font-size: 1.2rem;
+  }
+
+  .coupon-input {
+    font-size: 0.82rem;
+    padding: 8px 12px;
+  }
+
+  .btn-coupon-apply {
+    padding: 8px 14px;
+    font-size: 0.82rem;
+  }
+}
+

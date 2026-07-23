@@ -1409,8 +1409,11 @@ export default function CustomerView() {
       return;
     }
     
-    const activeOrder = orderTracking || placedOrder;
-    if (!activeOrder) {
+    const targetOrders = activeTableOrders.filter(o => o.status !== 'assistance_needed');
+    const fallbackOrder = orderTracking || placedOrder;
+    const ordersToUpdate = targetOrders.length > 0 ? targetOrders : (fallbackOrder ? [fallbackOrder] : []);
+
+    if (!ordersToUpdate.length) {
       showToast('❌ No active order found to request bill for.', 'error');
       return;
     }
@@ -1427,36 +1430,40 @@ export default function CustomerView() {
         }
       }
       
-      let finalPrice = activeOrder.total_price || 0;
-      let finalItems = activeOrder.items || '';
-      
-      if (voucherDiscount > 0) {
-        const voucherDiscountAmount = finalPrice * voucherDiscount;
-        finalPrice = finalPrice - voucherDiscountAmount;
-        finalItems = finalItems + `\n[🎟️ 20% Voucher Applied]`;
+      let lastUpdated = null;
+      for (const ord of ordersToUpdate) {
+        let finalPrice = ord.total_price || 0;
+        let finalItems = ord.items || '';
+        
+        if (voucherDiscount > 0) {
+          const voucherDiscountAmount = finalPrice * voucherDiscount;
+          finalPrice = finalPrice - voucherDiscountAmount;
+          finalItems = finalItems + `\n[🎟️ 20% Voucher Applied]`;
+        }
+        
+        const itemsCount = [...finalItems.matchAll(/(\d+)x/g)].reduce((sum, match) => sum + parseInt(match[1]), 0);
+        const minItems = cafe?.discount_min_items || 0;
+        const discountPercent = cafe?.discount_percentage || 0;
+        
+        if (minItems > 0 && discountPercent > 0 && itemsCount >= minItems) {
+          const discountAmount = finalPrice * (discountPercent / 100);
+          finalPrice = finalPrice - discountAmount;
+          finalItems = finalItems + `\n[🎁 ${discountPercent}% UGC Discount Applied]`;
+        }
+        
+        const updated = await updateOrder(ord.id, { 
+          status: 'bill_requested',
+          total_price: finalPrice,
+          items: finalItems,
+          ugc_image: JSON.stringify(uploadedUrls)
+        });
+        if (updated) lastUpdated = updated;
       }
       
-      const itemsCount = [...finalItems.matchAll(/(\d+)x/g)].reduce((sum, match) => sum + parseInt(match[1]), 0);
-      const minItems = cafe?.discount_min_items || 0;
-      const discountPercent = cafe?.discount_percentage || 0;
-      
-      if (minItems > 0 && discountPercent > 0 && itemsCount >= minItems) {
-        const discountAmount = finalPrice * (discountPercent / 100);
-        finalPrice = finalPrice - discountAmount;
-        finalItems = finalItems + `\n[🎁 ${discountPercent}% UGC Discount Applied]`;
-      }
-      
-      const updated = await updateOrder(activeOrder.id, { 
-        status: 'bill_requested',
-        total_price: finalPrice,
-        items: finalItems,
-        ugc_image: JSON.stringify(uploadedUrls)
-      });
-      
-      if (updated) {
-        setOrderTracking(updated);
-        setPlacedOrder(updated);
-        localStorage.setItem(`placed_order_cafe_${cafeId}_table_${resolvedTableId}`, JSON.stringify(updated));
+      if (lastUpdated) {
+        setOrderTracking(lastUpdated);
+        setPlacedOrder(lastUpdated);
+        localStorage.setItem(`placed_order_cafe_${cafeId}_table_${resolvedTableId}`, JSON.stringify(lastUpdated));
         setShowBillRequestModal(false);
         setBillPhotos([]);
         setBillPhotosPreviews([]);
@@ -1923,13 +1930,16 @@ export default function CustomerView() {
             )}
           </div>
 
-          {/* Itemized breakdown drawer when toggled */}
-          {showRunningTabDrawer && activeTableOrders.length > 0 && (
+          {/* Itemized breakdown drawer when toggled or when multiple orders exist */}
+          {(showRunningTabDrawer || activeTableOrders.length > 1) && activeTableOrders.length > 0 && (
             <div className="overview-breakdown-drawer">
+              <div className="drawer-header-summary" style={{ fontSize: '0.82rem', fontWeight: 800, color: 'var(--customer-accent)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                📋 MERGED ORDER BREAKDOWN ({activeTableOrders.filter(o => o.status !== 'assistance_needed').length} {activeTableOrders.filter(o => o.status !== 'assistance_needed').length === 1 ? 'ORDER' : 'ORDERS'} COMBINED):
+              </div>
               {activeTableOrders.filter(o => o.status !== 'assistance_needed').map((ord, idx) => (
                 <div key={ord.id} className="drawer-order-item">
                   <div className="drawer-item-top">
-                    <span>Order #{idx + 1} ({new Date(ord.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})</span>
+                    <span>{idx === 0 ? '🛒 Initial Order (#1)' : `➕ Add-on Order (#${idx + 1})`} • {new Date(ord.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                     <span className={`status-badge badge-${ord.status}`}>{ord.status.toUpperCase()}</span>
                   </div>
                   <div className="drawer-item-names">{ord.items}</div>

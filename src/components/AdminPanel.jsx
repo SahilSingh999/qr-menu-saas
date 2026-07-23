@@ -4566,9 +4566,24 @@ export function PrintBillModal({ order, cafe, menuItems, formatPrice, onClose, o
   });
 
   // UGC Verification check
-  const isUgcDiscountClaimed = itemsText.includes('UGC Discount Applied') || 
+  const isUgcDiscountClaimed = fullItemsText.includes('UGC Discount Applied') || 
     (cafe?.discount_min_items > 0 && parsedItems.reduce((acc, pi) => acc + pi.qty, 0) >= cafe?.discount_min_items);
-  const hasUploadedPhotos = order.ugc_image && JSON.parse(order.ugc_image).length > 0;
+  
+  let hasUploadedPhotos = false;
+  if (order?.ugc_image) {
+    try {
+      const parsed = typeof order.ugc_image === 'string' ? JSON.parse(order.ugc_image) : order.ugc_image;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        hasUploadedPhotos = true;
+      } else if (typeof order.ugc_image === 'string' && order.ugc_image.startsWith('http')) {
+        hasUploadedPhotos = true;
+      }
+    } catch {
+      if (typeof order.ugc_image === 'string' && order.ugc_image.startsWith('http')) {
+        hasUploadedPhotos = true;
+      }
+    }
+  }
   const isUgcMismatch = isUgcDiscountClaimed && !hasUploadedPhotos;
 
   const handleRevokeDiscount = () => {

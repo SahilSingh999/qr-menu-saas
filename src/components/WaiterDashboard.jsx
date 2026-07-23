@@ -423,10 +423,32 @@ export default function WaiterDashboard() {
   };
 
   const handleApproveBill = async (orderId) => {
-    const updated = await updateOrder(orderId, { status: 'bill_approved' });
-    if (updated) {
-      setOrders(prev => prev.map(o => o.id === orderId ? updated : o));
+    const targetOrder = orders.find(o => o.id === orderId);
+    if (!targetOrder) return;
+    const sameTableOrders = orders.filter(o => 
+      String(o.table_number) === String(targetOrder.table_number) &&
+      o.status !== 'completed' && o.status !== 'cancelled' && o.status !== 'bill_approved'
+    );
+    const toUpdate = sameTableOrders.length > 0 ? sameTableOrders : [targetOrder];
+    for (const ord of toUpdate) {
+      const updated = await updateOrder(ord.id, { status: 'bill_approved' });
+      if (updated) {
+        setOrders(prev => prev.map(o => o.id === ord.id ? updated : o));
+      }
     }
+  };
+
+  const handleOpenPrintBill = (targetOrder) => {
+    if (!targetOrder) return;
+    const rawTable = String(targetOrder.table_number || 'General');
+    const sameTableOrders = orders.filter(o => 
+      String(o.table_number) === rawTable &&
+      o.status !== 'cancelled' && o.status !== 'assistance_needed' && o.status !== 'assistance_resolved'
+    );
+    setSelectedOrderForBill({
+      ...targetOrder,
+      tabOrders: sameTableOrders.length > 0 ? sameTableOrders : [targetOrder]
+    });
   };
 
   const handleApproveBillWithDetails = async (orderId, applyDiscount, discountPct, finalTotal, tabOrdersList = null) => {
@@ -1038,7 +1060,7 @@ export default function WaiterDashboard() {
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
                             <button 
                               className="action-btn-progress progress-bill-approve"
-                              onClick={() => setSelectedOrderForBill(order)}
+                              onClick={() => handleOpenPrintBill(order)}
                               style={{ background: '#3b82f6', color: 'white', width: '100%', fontWeight: '700', padding: '12px' }}
                             >
                               🖨️ Review & Print Bill
@@ -1121,7 +1143,7 @@ export default function WaiterDashboard() {
                           <button
                             type="button"
                             className="btn-select"
-                            onClick={() => setSelectedOrderForBill(order)}
+                            onClick={() => handleOpenPrintBill(order)}
                             style={{ padding: '6px 12px', fontSize: '0.8rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', borderRadius: '8px', color: 'white', fontWeight: 'bold' }}
                           >
                             🖨️ Reprint Bill Receipt
