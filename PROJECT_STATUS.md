@@ -62,6 +62,7 @@ Multi-tenant QR Menu SaaS. Super Admin provisions cafe branches. Owners get acti
 16. **QR Domain Auto-Detection** - qrBaseUrl now uses window.location.origin, fixing 404 on phone scan
 17. **QR Domain Hardcode Fix & Interceptor** - Removed ALL stale `qr-menu-saas.vercel.app` hardcodes; `formatQrDomain` in `security.js` automatically rewrites dead domains to `window.location.origin`.
 18. **Save Domain Confirmation Feedback** - Added animated confirmation badge (`✅ Saved to DB for [Cafe Name]!`) and top alert banner when saving default QR domains in AdminPanel.
+19. **Running Table Tab (Add-on Order Merge)** - Multiple add-on orders placed at the same table automatically group into one unified running tab (e.g. Rs 300 + Rs 500 = Rs 800) with combined receipts across Customer View, Waiter Dashboard, and Admin Panel.
 
 ---
 
