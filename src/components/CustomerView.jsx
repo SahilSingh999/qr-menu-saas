@@ -1093,7 +1093,8 @@ export default function CustomerView() {
     if (allOrders && Array.isArray(allOrders)) {
       const activeForTable = allOrders.filter(o => {
         if (!o) return false;
-        if (o.status === 'completed' || o.status === 'cancelled' || o.status === 'assistance_resolved') return false;
+        // Keep served/completed items in running tab until final bill is approved!
+        if (o.status === 'bill_approved' || o.status === 'cancelled' || o.status === 'assistance_resolved') return false;
         const oTable = String(o.table_number || '');
         return oTable === String(resolvedTableId) || oTable === String(tableId);
       });
@@ -1112,24 +1113,27 @@ export default function CustomerView() {
     return sum + (isNaN(priceNum) ? 0 : priceNum);
   }, 0);
 
-  // Polling fallback to ensure status is updated even if socket connection drops on mobile device wakeups
+  // Polling fallback to ensure status and running table tab total are continuously updated
   useEffect(() => {
-    if (!placedOrder?.id) return;
+    if (!cafeId || !resolvedTableId) return;
+    loadTableOrders();
     const interval = setInterval(async () => {
-      try {
-        const { data, error } = await supabase
-          .from('orders')
-          .select('*')
-          .eq('id', placedOrder.id)
-          .single();
-        if (data && !error) {
-          setOrderTracking(data);
-          localStorage.setItem(`placed_order_cafe_${cafeId}_table_${resolvedTableId}`, JSON.stringify(data));
+      loadTableOrders();
+      if (placedOrder?.id) {
+        try {
+          const { data, error } = await supabase
+            .from('orders')
+            .select('*')
+            .eq('id', placedOrder.id)
+            .single();
+          if (data && !error) {
+            setOrderTracking(data);
+          }
+        } catch (err) {
+          console.warn('Silent polling error:', err);
         }
-      } catch (err) {
-        console.warn('Silent polling error:', err);
       }
-    }, 10000);
+    }, 5000);
 
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
