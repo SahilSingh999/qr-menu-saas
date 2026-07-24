@@ -634,7 +634,44 @@ export default function AdminPanel({ mode = 'owner' }) {
 
   const loadMenuItems = async (cafeId) => {
     const data = await fetchMenuItems(cafeId);
-    if (data) setMenuItems(data);
+    if (data) {
+      // Sort items by sort_order if present
+      const sorted = [...data].sort((a, b) => {
+        if (a.sort_order !== undefined && b.sort_order !== undefined && a.sort_order !== b.sort_order) {
+          return a.sort_order - b.sort_order;
+        }
+        return (a.id || 0) - (b.id || 0);
+      });
+      setMenuItems(sorted);
+    }
+  };
+
+  const handleReorderMenuItem = async (index, direction) => {
+    if (!menuItems || menuItems.length <= 1) return;
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= menuItems.length) return;
+
+    const newItems = [...menuItems];
+    const temp = newItems[index];
+    newItems[index] = newItems[targetIndex];
+    newItems[targetIndex] = temp;
+
+    const updatedWithOrder = newItems.map((item, idx) => ({
+      ...item,
+      sort_order: idx + 1
+    }));
+
+    setMenuItems(updatedWithOrder);
+
+    try {
+      if (updateMenuItem) {
+        await updateMenuItem(updatedWithOrder[index].id, { sort_order: updatedWithOrder[index].sort_order });
+        await updateMenuItem(updatedWithOrder[targetIndex].id, { sort_order: updatedWithOrder[targetIndex].sort_order });
+      }
+      showAdminAlert('↕️ Menu item sequence updated!');
+    } catch (e) {
+      console.warn('Silent reorder update:', e);
+    }
   };
 
   const loadOrders = async (cafeId) => {
@@ -3897,7 +3934,7 @@ export default function AdminPanel({ mode = 'owner' }) {
                   </div>
                 ) : (
                   <div className="menu-list-grid">
-                    {menuItems.map(item => (
+                    {menuItems.map((item, index) => (
                       <div key={item.id} className="menu-item-row">
                         {item.image_url && (
                           <img src={item.image_url} alt={item.name} className="admin-menu-thumb" />
@@ -3942,6 +3979,28 @@ export default function AdminPanel({ mode = 'owner' }) {
                           <span className={`category-tag tag-${item.category.toLowerCase()}`}>{item.category}</span>
                         </div>
                         <div className="menu-item-actions">
+                          <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                            <button 
+                              type="button"
+                              className="btn-select"
+                              onClick={() => handleReorderMenuItem(index, 'up')}
+                              disabled={index === 0}
+                              title="Move Item Up"
+                              style={{ padding: '6px 10px', fontSize: '0.8rem', opacity: index === 0 ? 0.3 : 1, cursor: index === 0 ? 'not-allowed' : 'pointer' }}
+                            >
+                              ⬆️
+                            </button>
+                            <button 
+                              type="button"
+                              className="btn-select"
+                              onClick={() => handleReorderMenuItem(index, 'down')}
+                              disabled={index === menuItems.length - 1}
+                              title="Move Item Down"
+                              style={{ padding: '6px 10px', fontSize: '0.8rem', opacity: index === menuItems.length - 1 ? 0.3 : 1, cursor: index === menuItems.length - 1 ? 'not-allowed' : 'pointer' }}
+                            >
+                              ⬇️
+                            </button>
+                          </div>
                           <select
                             className={`btn-availability select-availability ${item.availability_status || (item.is_available ? 'available' : 'out-of-stock')}`}
                             value={item.availability_status || (item.is_available ? 'available' : 'out-of-stock')}

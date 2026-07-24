@@ -894,6 +894,108 @@ const STATUS_STEPS = [
   { key: 'checkout', label: 'Checkout',statuses: ['bill_requested','bill_approved'] },
 ];
 
+// ─── Multi-Language Translation Dictionary (English / Hindi) ───────────────────
+const TRANSLATIONS = {
+  en: {
+    search_placeholder: "Search delicious food...",
+    all_categories: "All Items",
+    veg_only: "Veg Only",
+    non_veg_only: "Non-Veg Only",
+    add: "ADD",
+    added: "ADDED",
+    customisable: "Customisable",
+    table: "Table",
+    place_order: "Place Order",
+    items_in_cart: "items in cart",
+    view_cart: "View Order & Bill",
+    call_waiter: "Call Waiter",
+    calling_waiter: "Calling...",
+    waiter_called: "Waiter Notified! 🔔",
+    order_placed_success: "🎉 Order Placed Successfully!",
+    active_tickets: "Active Tickets",
+    tickets: "Tickets",
+    final_combined_total: "Final Combined Total",
+    total: "Total",
+    subtotal: "Subtotal",
+    tax_charges: "Taxes & Service",
+    grand_total: "Grand Total",
+    pay_now: "Pay & Complete Bill",
+    clear_table: "Clear Table & Checkout",
+    play_snake: "🎮 Play Foodie Snake While You Wait!",
+    score: "Score",
+    high_score: "High Score",
+    game_over: "Game Over!",
+    play_again: "Play Again",
+    empty_cart: "Your cart is empty",
+    add_items_to_start: "Add items from the menu to start your order.",
+    special_instructions: "Special Instructions (optional)",
+    instructions_placeholder: "e.g. Extra spicy, no onions, allergies...",
+    item_customization: "Customize Item",
+    select_variant: "Select Option",
+    confirm_add: "Add to Cart",
+    close: "Close",
+    table_overview: "Table Summary & Running Bill",
+    round: "Round",
+    placed_at: "Placed at",
+    status_pending: "Received 🕒",
+    status_preparing: "Kitchen Preparing 👨‍🍳",
+    status_served: "Served 🍽️",
+    status_completed: "Completed ✅",
+    need_anything_else: "Need anything else?",
+    add_more_items: "Add More Items",
+    popular: "Popular 🔥"
+  },
+  hi: {
+    search_placeholder: "स्वादिष्ट भोजन खोजें...",
+    all_categories: "सभी व्यंजन",
+    veg_only: "केवल शाकाहारी",
+    non_veg_only: "केवल मांसाहारी",
+    add: "जोड़ें",
+    added: "जोड़ा गया",
+    customisable: "अनुकूलन योग्य",
+    table: "टेबल",
+    place_order: "ऑर्डर दें",
+    items_in_cart: "आइटम कार्ट में",
+    view_cart: "ऑर्डर व बिल देखें",
+    call_waiter: "वेटर बुलाएं",
+    calling_waiter: "कॉल किया जा रहा है...",
+    waiter_called: "वेटर को सूचित किया गया! 🔔",
+    order_placed_success: "🎉 ऑर्डर सफलतापूर्वक भेजा गया!",
+    active_tickets: "सक्रिय टिकट",
+    tickets: "टिकट",
+    final_combined_total: "कुल मिलाकर अंतिम बिल",
+    total: "कुल",
+    subtotal: "उप-कुल",
+    tax_charges: "कर एवं शुल्क",
+    grand_total: "अंतिम कुल योग",
+    pay_now: "भुगतान करें एवं बिल पूरा करें",
+    clear_table: "टेबल खाली करें और चेकआउट करें",
+    play_snake: "🎮 प्रतीक्षा करते समय स्नेक गेम खेलें!",
+    score: "स्कोर",
+    high_score: "उच्चतम स्कोर",
+    game_over: "खेल समाप्त!",
+    play_again: "पुनः खेलें",
+    empty_cart: "आपकी कार्ट खाली है",
+    add_items_to_start: "ऑर्डर शुरू करने के लिए मेनू से आइटम जोड़ें।",
+    special_instructions: "विशेष निर्देश (वैकल्पिक)",
+    instructions_placeholder: "जैसे अधिक तीखा, बिना प्याज, एलर्जी...",
+    item_customization: "आइटम अनुकूलित करें",
+    select_variant: "विकल्प चुनें",
+    confirm_add: "कार्ट में जोड़ें",
+    close: "बंद करें",
+    table_overview: "टेबल सारांश एवं रनिंग बिल",
+    round: "राउंड",
+    placed_at: "समय",
+    status_pending: "प्राप्त हुआ 🕒",
+    status_preparing: "रसोई में बन रहा है 👨‍🍳",
+    status_served: "परोस दिया गया 🍽️",
+    status_completed: "पूरा हुआ ✅",
+    need_anything_else: "कुछ और चाहिए?",
+    add_more_items: "और आइटम जोड़ें",
+    popular: "लोकप्रिय 🔥"
+  }
+};
+
 export default function CustomerView() {
   const { tableId } = useParams();
   const [searchParams] = useSearchParams();
@@ -915,6 +1017,17 @@ export default function CustomerView() {
   } = useSupabase();
 
   const { formatPrice, setCurrencyCode } = useCurrency();
+
+  // Multi-Language State (English & Hindi)
+  const [lang, setLang] = useState(() => localStorage.getItem('qr_menu_lang') || 'en');
+  const t = (key) => TRANSLATIONS[lang]?.[key] || TRANSLATIONS.en[key] || key;
+  const toggleLanguage = () => {
+    setLang(prev => {
+      const next = prev === 'en' ? 'hi' : 'en';
+      localStorage.setItem('qr_menu_lang', next);
+      return next;
+    });
+  };
 
   // State
   const [cafe, setCafe] = useState(null);
@@ -1823,19 +1936,29 @@ export default function CustomerView() {
               {cafe?.location && <p className="cv-cafe-branch">📍 {cafe.location}</p>}
             </div>
           </div>
-          <button
-            className="cv-theme-toggle"
-            onClick={toggleCustomerTheme}
-            title={customerTheme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-          >
-            {customerTheme === 'dark' ? '☀️' : '🌙'}
-          </button>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button
+              className="cv-theme-toggle"
+              onClick={toggleLanguage}
+              title={lang === 'en' ? 'Switch to Hindi (हिंदी)' : 'Switch to English'}
+              style={{ fontSize: '0.82rem', padding: '6px 12px', borderRadius: '20px', fontWeight: 'bold', cursor: 'pointer', background: 'var(--bg-tertiary, rgba(255,255,255,0.1))', border: '1px solid rgba(255,255,255,0.2)', color: 'var(--text-main)' }}
+            >
+              {lang === 'en' ? '🌐 EN' : '🌐 हिंदी'}
+            </button>
+            <button
+              className="cv-theme-toggle"
+              onClick={toggleCustomerTheme}
+              title={customerTheme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            >
+              {customerTheme === 'dark' ? '☀️' : '🌙'}
+            </button>
+          </div>
         </div>
 
         {/* Bottom Part: 2-Part Grid for Table No & Call Waiter */}
         <div className="cv-hero-bottom-grid">
           <div className="cv-table-badge">
-            <span className="cv-table-label">TABLE</span>
+            <span className="cv-table-label">{t('table').toUpperCase()}</span>
             <span className="cv-table-num">{tableId || 'N/A'}</span>
           </div>
           <button
@@ -1843,7 +1966,7 @@ export default function CustomerView() {
             onClick={handleCallWaiter}
             disabled={isBuzzerActive}
           >
-            {isBuzzerActive ? '🔔 Summoned…' : '🙋 Call Waiter'}
+            {isBuzzerActive ? `🔔 ${t('calling_waiter')}` : `🙋 ${t('call_waiter')}`}
           </button>
         </div>
       </div>
