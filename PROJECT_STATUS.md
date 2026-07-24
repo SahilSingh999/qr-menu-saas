@@ -80,7 +80,7 @@ Multi-tenant QR Menu SaaS. Super Admin provisions cafe branches. Owners get acti
 20. **Mobile-Optimized Order Overview & Final Combined Checkout** - Customer view dynamically sums all active table tickets into a **FINAL COMBINED TOTAL** (e.g. Ticket #1: ₹200 + Ticket #2: ₹400 = **₹600**), with an itemized tickets dropdown (`📋 Tickets (2) ▼`) and non-blocking toggle behavior.
 21. **Persistent Table Orders History Array** - Stored in `placed_orders_history_cafe_X_table_Y` to guarantee total bill and round-by-round breakdown retention across page refreshes, tab switches, and mobile network reconnections.
 22. **13x Faster Mobile QR Load (Route Code-Splitting)** - Splitted monolith JS bundle (~676 kB) into lightweight React.lazy route chunks (`CustomerView` is now only 54 kB / 15.6 kB gzipped).
-23. **Multi-Language Customer Menu (English & Hindi)** - Added header language toggle (`🌐 EN | हिंदी`), persisting selection in localStorage with full UI translations (search, cart, order status, call waiter, table bill overview).
+23. **Global English UI Standardization** - Enforced crisp, standard English UI interface globally across Customer, Waiter, and Admin panels without clutter.
 24. **Menu Category & Item Reordering** - Added ⬆️ / ⬇️ reordering controls in Admin Panel, automatically persisting `sort_order` sequence across admin and customer views.
 
 ---
