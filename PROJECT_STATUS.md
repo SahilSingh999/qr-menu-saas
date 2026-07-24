@@ -82,6 +82,8 @@ Multi-tenant QR Menu SaaS. Super Admin provisions cafe branches. Owners get acti
 22. **13x Faster Mobile QR Load (Route Code-Splitting)** - Splitted monolith JS bundle (~676 kB) into lightweight React.lazy route chunks (`CustomerView` is now only 54 kB / 15.6 kB gzipped).
 23. **Global English UI Standardization** - Enforced crisp, standard English UI interface globally across Customer, Waiter, and Admin panels without clutter.
 24. **Menu Category & Item Reordering** - Added ⬆️ / ⬇️ reordering controls in Admin Panel, automatically persisting `sort_order` sequence across admin and customer views.
+25. **Defensive Security & XSS Input Sanitization** - Implemented `sanitizeInput()` in `security.js` to escape hazardous HTML entities across order notes, table numbers, and catalog inputs.
+26. **Brute-Force Rate Limiter & 30-Min Idle Session Logout** - Enforced login/activation key rate limiting (5 attempts max, 60s lock) and automatic 30-minute inactivity auto-logout on Admin & Waiter POS dashboards.
 
 ---
 
