@@ -63,6 +63,31 @@ export default function WaiterDashboard() {
   const [dashboardViewMode, setDashboardViewMode] = useState('tabs');
   const [isAudioMuted, setIsAudioMuted] = useState(false);
   const [fullscreenPhoto, setFullscreenPhoto] = useState(null);
+
+  // 30-Minute Inactivity Auto-Logout Watchdog for Waiter Session
+  useEffect(() => {
+    if (!selectedCafe) return;
+
+    let inactivityTimer;
+    const INACTIVITY_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+
+    const resetInactivityTimer = () => {
+      if (inactivityTimer) clearTimeout(inactivityTimer);
+      inactivityTimer = setTimeout(() => {
+        // Clear active session on 30 min idle for POS security
+        setSelectedCafe(null);
+      }, INACTIVITY_TIMEOUT);
+    };
+
+    const activityEvents = ['mousedown', 'mousemove', 'keydown', 'touchstart', 'scroll'];
+    activityEvents.forEach(evt => window.addEventListener(evt, resetInactivityTimer, { passive: true }));
+    resetInactivityTimer();
+
+    return () => {
+      if (inactivityTimer) clearTimeout(inactivityTimer);
+      activityEvents.forEach(evt => window.removeEventListener(evt, resetInactivityTimer));
+    };
+  }, [selectedCafe]);
   const [confirmCancelId, setConfirmCancelId] = useState(null);
   const [toast, setToast] = useState(null);
 

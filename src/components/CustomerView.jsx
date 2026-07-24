@@ -3,6 +3,7 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import { useSupabase } from '../context/SupabaseContext';
 import { useCurrency } from '../context/CurrencyContext';
 import { getRunningTabs, formatTabConsolidatedItems } from '../utils/tableTabUtils';
+import { sanitizeInput } from '../utils/security';
 
 // Canvas-based Retro Snake Game
 const SnakeGame = ({ themeColor }) => {
@@ -1316,13 +1317,13 @@ export default function CustomerView() {
 
     const itemsStr = cart.map(cartItem => {
       const portionText = cartItem.portion ? ` (${cartItem.portion})` : '';
-      return `${cartItem.quantity}x ${cartItem.item.name}${portionText}`;
+      return `${cartItem.quantity}x ${sanitizeInput(cartItem.item.name)}${sanitizeInput(portionText)}`;
     }).join(', ');
     const total = getCartTotal();
 
     const orderData = {
       cafe_id: parseInt(cafe?.id || cafeId),
-      table_number: resolvedTableId || 'General',
+      table_number: sanitizeInput(String(resolvedTableId || 'General')),
       items: itemsStr,
       total_price: total,
       status: 'pending'

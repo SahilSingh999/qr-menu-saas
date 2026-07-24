@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSupabase } from '../context/SupabaseContext';
 import { useCurrency } from '../context/CurrencyContext';
-import { verifySuperAdmin, verifyPassword, formatQrDomain } from '../utils/security';
+import { verifySuperAdmin, verifyPassword, formatQrDomain, sanitizeInput, loginRateLimiter } from '../utils/security';
 import { soundAlerts } from '../utils/soundAlerts';
 
 export default function AdminPanel({ mode = 'owner' }) {
@@ -495,6 +495,36 @@ export default function AdminPanel({ mode = 'owner' }) {
     _setLoginTab(mode === 'superadmin' ? 'super' : 'owner');
   }, [mode]);
 
+  // 30-Minute Inactivity Auto-Logout Security Watchdog
+  useEffect(() => {
+    if (!adminSession && !isSuperAdminSession) return;
+
+    let inactivityTimer;
+    const INACTIVITY_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+
+    const resetInactivityTimer = () => {
+      if (inactivityTimer) clearTimeout(inactivityTimer);
+      inactivityTimer = setTimeout(() => {
+        // Logout inactive session for security
+        localStorage.removeItem('admin_session_cafe_id');
+        localStorage.removeItem('is_super_admin_session');
+        setAdminSession(null);
+        setIsSuperAdminSession(false);
+        setSelectedCafe(null);
+        showAdminAlert('🔒 Session expired due to 30 minutes of inactivity for security.');
+      }, INACTIVITY_TIMEOUT);
+    };
+
+    const activityEvents = ['mousedown', 'mousemove', 'keydown', 'touchstart', 'scroll'];
+    activityEvents.forEach(evt => window.addEventListener(evt, resetInactivityTimer, { passive: true }));
+    resetInactivityTimer();
+
+    return () => {
+      if (inactivityTimer) clearTimeout(inactivityTimer);
+      activityEvents.forEach(evt => window.removeEventListener(evt, resetInactivityTimer));
+    };
+  }, [adminSession, isSuperAdminSession]);
+
 
   // Fetch Cafe-specific data (Menu and Orders) and subscribe to realtime orders
   useEffect(() => {
@@ -702,9 +732,17 @@ export default function AdminPanel({ mode = 'owner' }) {
   const handleAdminLogin = async () => {
     setAdminAlertMsg('');
 
+    const rateKey = loginTab === 'super' ? 'login_superadmin' : `login_${loginUsername.trim().toLowerCase()}`;
+    const status = loginRateLimiter.isLocked(rateKey);
+    if (status.locked) {
+      setAdminAlertMsg(`⚠️ Too many failed attempts. Security lock active for ${status.remainingSeconds}s.`);
+      return;
+    }
+
     if (loginTab === 'super') {
       const isSuperValid = await verifySuperAdmin(superAdminUsername, superAdminPassword);
       if (isSuperValid) {
+        loginRateLimiter.reset(rateKey);
         setIsSuperAdminSession(true);
         localStorage.setItem('is_super_admin_session', 'true');
         
@@ -720,7 +758,12 @@ export default function AdminPanel({ mode = 'owner' }) {
         setSuperAdminPassword('');
         setAdminAlertMsg('');
       } else {
-        setAdminAlertMsg('❌ Incorrect Super Admin credentials.');
+        const fail = loginRateLimiter.recordFailedAttempt(rateKey);
+        if (fail.locked) {
+          setAdminAlertMsg(`⚠️ Too many failed attempts. Security lock active for ${fail.remainingSeconds}s.`);
+        } else {
+          setAdminAlertMsg(`❌ Incorrect Super Admin credentials. (${fail.remainingAttempts} attempts remaining)`);
+        }
       }
       return;
     }
@@ -744,6 +787,7 @@ export default function AdminPanel({ mode = 'owner' }) {
       const correctPassword = target.admin_password || 'admin123';
       const isPasswordValid = await verifyPassword(loginPassword, correctPassword);
       if (isPasswordValid) {
+        loginRateLimiter.reset(rateKey);
         setAdminSession(target.id);
         setSelectedCafe(target);
         localStorage.setItem('admin_session_cafe_id', String(target.id));
@@ -756,10 +800,20 @@ export default function AdminPanel({ mode = 'owner' }) {
         setLoginUsername('');
         setAdminAlertMsg('');
       } else {
-        setAdminAlertMsg('❌ Incorrect admin password. Please try again.');
+        const fail = loginRateLimiter.recordFailedAttempt(rateKey);
+        if (fail.locked) {
+          setAdminAlertMsg(`⚠️ Too many failed attempts. Security lock active for ${fail.remainingSeconds}s.`);
+        } else {
+          setAdminAlertMsg(`❌ Incorrect admin password. (${fail.remainingAttempts} attempts remaining)`);
+        }
       }
     } else {
-      setAdminAlertMsg('❌ Admin username not found. Please verify and try again.');
+      const fail = loginRateLimiter.recordFailedAttempt(rateKey);
+      if (fail.locked) {
+        setAdminAlertMsg(`⚠️ Too many failed attempts. Security lock active for ${fail.remainingSeconds}s.`);
+      } else {
+        setAdminAlertMsg(`❌ Admin username not found. (${fail.remainingAttempts} attempts remaining)`);
+      }
     }
   };
 
