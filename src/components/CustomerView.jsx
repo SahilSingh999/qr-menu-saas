@@ -873,13 +873,24 @@ const VegDot = ({ isVeg }) => (
   />
 );
 
-// ─── Category icon map ──────────────────────────────────────────────────────────
-const CATEGORY_ICONS = {
-  'All': '🍽️',
-  'Starter': '🥗',
-  'Main Course': '🍛',
-  'Drinks & Beverages': '🥤',
-  'Fast Food': '🍟',
+// ─── Dynamic Category Icon Helper (Keyword Matching) ──────────────────────────
+const getCategoryIcon = (categoryName) => {
+  if (!categoryName) return '🍽️';
+  const name = String(categoryName).toLowerCase().trim();
+
+  if (name === 'all') return '🍽️';
+  if (name.includes('drink') || name.includes('beverage') || name.includes('juice') || name.includes('tea') || name.includes('coffee') || name.includes('bar') || name.includes('mocktail') || name.includes('cocktail') || name.includes('shake') || name.includes('smoothie') || name.includes('soda') || name.includes('brew')) return '🥤';
+  if (name.includes('main') || name.includes('curry') || name.includes('rice') || name.includes('noodle') || name.includes('thali') || name.includes('dinner') || name.includes('lunch') || name.includes('entrée') || name.includes('entree') || name.includes('biryani') || name.includes('dosa') || name.includes('gravy')) return '🍛';
+  if (name.includes('start') || name.includes('appetiz') || name.includes('salad') || name.includes('soup') || name.includes('snack') || name.includes('chaat') || name.includes('bites') || name.includes('finger')) return '🥗';
+  if (name.includes('fast') || name.includes('burger') || name.includes('pizza') || name.includes('sandwich') || name.includes('fries') || name.includes('wrap') || name.includes('taco') || name.includes('momo') || name.includes('roll') || name.includes('pasta')) return '🍟';
+  if (name.includes('dessert') || name.includes('sweet') || name.includes('cake') || name.includes('ice') || name.includes('bakery') || name.includes('pastry') || name.includes('brownie') || name.includes('pudding') || name.includes('mithai')) return '🍰';
+  if (name.includes('breakfast') || name.includes('egg') || name.includes('pancake') || name.includes('waffle') || name.includes('toast') || name.includes('omelet') || name.includes('morning')) return '🍳';
+  if (name.includes('bbq') || name.includes('grill') || name.includes('tandoori') || name.includes('kebab') || name.includes('sizzler') || name.includes('roast') || name.includes('tikka')) return '🍢';
+  if (name.includes('seafood') || name.includes('fish') || name.includes('prawn') || name.includes('crab') || name.includes('shrimp')) return '🐟';
+  if (name.includes('bread') || name.includes('roti') || name.includes('naan') || name.includes('paratha') || name.includes('kulcha')) return '🫓';
+  if (name.includes('combo') || name.includes('special') || name.includes('offer') || name.includes('deal') || name.includes('chef') || name.includes('bestseller') || name.includes('popular')) return '⭐';
+
+  return '🍴';
 };
 
 // ─── Predefined category order ─────────────────────────────────────────────────
@@ -2052,7 +2063,7 @@ export default function CustomerView() {
                   className={`cv-cat-pill ${activeCategory === cat ? 'active' : ''}`}
                   onClick={() => setActiveCategory(cat)}
                 >
-                  <span className="cat-icon">{CATEGORY_ICONS[cat] || '🍴'}</span>
+                  <span className="cat-icon">{getCategoryIcon(cat)}</span>
                   {cat}
                 </button>
               ))}
@@ -2061,7 +2072,7 @@ export default function CustomerView() {
             {/* All Items — vertical list on mobile, 2-col grid on desktop */}
             <div className="cv-all-items-section">
               <div className="cv-section-title">
-                <span className="section-title-icon">{CATEGORY_ICONS[activeCategory] || '🍴'}</span>
+                <span className="section-title-icon">{getCategoryIcon(activeCategory)}</span>
                 <h2>{activeCategory === 'All' ? 'All Items' : activeCategory}</h2>
               </div>
 
