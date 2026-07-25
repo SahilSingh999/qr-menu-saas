@@ -4816,6 +4816,13 @@ export function PrintBillModal({ order, cafe, menuItems, formatPrice, onClose, o
           {/* Printable Bill Wrapper */}
           <div className="printable-bill-wrapper">
             <div className="bill-header">
+              {cafe?.logo_url && (
+                <img 
+                  src={cafe.logo_url} 
+                  alt={cafe.name || 'Logo'} 
+                  className="bill-cafe-logo"
+                />
+              )}
               <h1>{cafe?.name || 'Cafe & Restro'}</h1>
               {cafe?.description && <p>{cafe.description}</p>}
               {cafe?.location && <p>Branch: {cafe.location}</p>}
@@ -4899,7 +4906,6 @@ export function PrintBillModal({ order, cafe, menuItems, formatPrice, onClose, o
 
             <div className="bill-footer">
               <p>{cafe?.footer_message || 'Thank You For Dining With Us!'}</p>
-              <p>Powered by Antigravity QR Menu SaaS</p>
             </div>
           </div>
 
