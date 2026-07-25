@@ -1389,6 +1389,13 @@ export default function AdminPanel({ mode = 'owner' }) {
     return `"${str}"`;
   };
 
+  const escapeCsvTextCell = (val) => {
+    if (val === null || val === undefined) return '""';
+    const str = String(val).replace(/"/g, '""');
+    // Forces Excel & spreadsheet viewers to evaluate cell as explicit text, preventing date auto-conversion & ### display overflow
+    return `="${str}"`;
+  };
+
   const formatDateForCsv = (dateString) => {
     if (!dateString) return { date: 'N/A', time: 'N/A' };
     const d = new Date(dateString);
@@ -1428,7 +1435,7 @@ export default function AdminPanel({ mode = 'owner' }) {
 
     const rows = [
       [escapeCsvCell(`SALES REPORT - ${cafeName.toUpperCase()}`)],
-      [escapeCsvCell(`Generated On: ${now.toLocaleDateString()} ${now.toLocaleTimeString()}`)],
+      [escapeCsvTextCell(`Generated On: ${now.toLocaleDateString()} ${now.toLocaleTimeString()}`)],
       [escapeCsvCell(`Period Filter: ${periodLabel}`)],
       [],
       [escapeCsvCell('EXECUTIVE SUMMARY')],
@@ -1466,8 +1473,8 @@ export default function AdminPanel({ mode = 'owner' }) {
           escapeCsvCell(tableNo),
           escapeCsvCell(itemsStr),
           escapeCsvCell(o.status || 'pending'),
-          escapeCsvCell(date),
-          escapeCsvCell(time),
+          escapeCsvTextCell(date),
+          escapeCsvTextCell(time),
           parseFloat(o.total_price || 0).toFixed(2)
         ];
       }),
