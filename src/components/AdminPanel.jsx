@@ -1356,49 +1356,140 @@ export default function AdminPanel({ mode = 'owner' }) {
     }
   };
 
-  // Sales Export Feature
+  // Sales Export Feature & Helpers
   const [salesPeriod, setSalesPeriod] = useState('monthly');
+
+  const getFilteredOrdersByPeriod = (ordersList, period) => {
+    if (!ordersList || !ordersList.length) return [];
+    const now = new Date();
+    return ordersList.filter(order => {
+      if (!order.created_at) return false;
+      const d = new Date(order.created_at);
+      if (isNaN(d.getTime())) return false;
+
+      if (period === 'weekly') {
+        const weekAgo = new Date(now);
+        weekAgo.setDate(now.getDate() - 7);
+        weekAgo.setHours(0, 0, 0, 0); // Start of 7 days ago 00:00:00
+        return d >= weekAgo;
+      } else if (period === 'monthly') {
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+        return d >= startOfMonth;
+      } else if (period === 'yearly') {
+        const startOfYear = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
+        return d >= startOfYear;
+      }
+      return true;
+    });
+  };
+
+  const escapeCsvCell = (val) => {
+    if (val === null || val === undefined) return '""';
+    const str = String(val).replace(/"/g, '""');
+    return `"${str}"`;
+  };
+
+  const formatDateForCsv = (dateString) => {
+    if (!dateString) return { date: 'N/A', time: 'N/A' };
+    const d = new Date(dateString);
+    if (isNaN(d.getTime())) return { date: 'N/A', time: 'N/A' };
+    
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    
+    let hours = d.getHours();
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    const seconds = String(d.getSeconds()).padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    const formattedHours = String(hours).padStart(2, '0');
+
+    return {
+      date: `${yyyy}-${mm}-${dd}`,
+      time: `${formattedHours}:${minutes}:${seconds} ${ampm}`
+    };
+  };
 
   const exportSalesData = () => {
     if (!orders.length) return;
     const now = new Date();
-    const filtered = orders.filter(order => {
-      const d = new Date(order.created_at);
-      if (salesPeriod === 'weekly') {
-        const weekAgo = new Date(now); weekAgo.setDate(now.getDate() - 7);
-        return d >= weekAgo;
-      } else if (salesPeriod === 'monthly') {
-        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-      } else {
-        return d.getFullYear() === now.getFullYear();
-      }
-    });
+    const filtered = getFilteredOrdersByPeriod(orders, salesPeriod);
+
+    const completed = filtered.filter(o => ['completed', 'bill_approved'].includes(o.status));
+    const cancelled = filtered.filter(o => o.status === 'cancelled');
+    const totalRevenue = completed.reduce((s, o) => s + parseFloat(o.total_price || 0), 0);
+    const avgOrder = completed.length ? (totalRevenue / completed.length) : 0;
+    const currSym = currency?.symbol || '₹';
+
+    const periodLabel = salesPeriod === 'weekly' ? 'Last 7 Days' : salesPeriod === 'monthly' ? 'This Month' : 'This Year';
+    const cafeName = selectedCafe?.name || 'Cafe';
 
     const rows = [
-      ['Order ID', 'Table', 'Items', `Total (${currency.symbol})`, 'Status', 'Date & Time'],
-      ...filtered.map(o => [
-        o.id,
-        o.table_number,
-        `"${o.items}"`,
-        parseFloat(o.total_price || 0).toFixed(2),
-        o.status,
-        new Date(o.created_at).toLocaleString()
-      ])
+      [escapeCsvCell(`SALES REPORT - ${cafeName.toUpperCase()}`)],
+      [escapeCsvCell(`Generated On: ${now.toLocaleDateString()} ${now.toLocaleTimeString()}`)],
+      [escapeCsvCell(`Period Filter: ${periodLabel}`)],
+      [],
+      [escapeCsvCell('EXECUTIVE SUMMARY')],
+      [
+        escapeCsvCell('Total Orders'),
+        escapeCsvCell('Completed Orders'),
+        escapeCsvCell('Cancelled Orders'),
+        escapeCsvCell(`Total Revenue (${currSym})`),
+        escapeCsvCell(`Avg Order Value (${currSym})`)
+      ],
+      [
+        filtered.length,
+        completed.length,
+        cancelled.length,
+        totalRevenue.toFixed(2),
+        avgOrder.toFixed(2)
+      ],
+      [],
+      [escapeCsvCell('TRANSACTION DETAILS')],
+      [
+        escapeCsvCell('Order ID'),
+        escapeCsvCell('Table No.'),
+        escapeCsvCell('Items Ordered'),
+        escapeCsvCell('Status'),
+        escapeCsvCell('Date'),
+        escapeCsvCell('Time'),
+        escapeCsvCell(`Total Amount (${currSym})`)
+      ],
+      ...filtered.map(o => {
+        const { date, time } = formatDateForCsv(o.created_at);
+        const tableNo = o.table_number !== undefined && o.table_number !== null ? `Table ${o.table_number}` : (o.table ? `Table ${o.table}` : 'N/A');
+        const itemsStr = o.items ? String(o.items).replace(/\n/g, ' | ') : 'N/A';
+        return [
+          o.id,
+          escapeCsvCell(tableNo),
+          escapeCsvCell(itemsStr),
+          escapeCsvCell(o.status || 'pending'),
+          escapeCsvCell(date),
+          escapeCsvCell(time),
+          parseFloat(o.total_price || 0).toFixed(2)
+        ];
+      }),
+      [],
+      [
+        escapeCsvCell('TOTAL SUMMARY'),
+        '',
+        escapeCsvCell(`${filtered.length} total orders`),
+        '',
+        '',
+        '',
+        totalRevenue.toFixed(2)
+      ]
     ];
 
-    const totalRevenue = filtered.reduce((s, o) => s + parseFloat(o.total_price || 0), 0);
-    rows.push([]);
-    rows.push(['SUMMARY', '', '', '', '', '']);
-    rows.push([`Period`, salesPeriod.toUpperCase(), '', '', '', '']);
-    rows.push([`Total Orders`, filtered.length, '', '', '', '']);
-    rows.push([`Total Revenue (${currency.symbol})`, totalRevenue.toFixed(2), '', '', '', '']);
-
-    const csv = rows.map(r => r.join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    // \uFEFF Byte Order Mark forces Microsoft Excel to open CSV with UTF-8 encoding (supporting ₹, Rs., $)
+    const csvContent = '\uFEFF' + rows.map(r => r.join(',')).join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${selectedCafe?.name || 'cafe'}_sales_${salesPeriod}_${now.toISOString().slice(0, 10)}.csv`;
+    a.download = `${cafeName.toLowerCase().replace(/[^a-z0-9]/g, '_')}_sales_${salesPeriod}_${now.toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -2591,18 +2682,7 @@ export default function AdminPanel({ mode = 'owner' }) {
 
                 {/* Summary Cards */}
                 {(() => {
-                  const now = new Date();
-                  const filtered = orders.filter(order => {
-                    const d = new Date(order.created_at);
-                    if (salesPeriod === 'weekly') {
-                      const weekAgo = new Date(now); weekAgo.setDate(now.getDate() - 7);
-                      return d >= weekAgo;
-                    } else if (salesPeriod === 'monthly') {
-                      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-                    } else {
-                      return d.getFullYear() === now.getFullYear();
-                    }
-                  });
+                  const filtered = getFilteredOrdersByPeriod(orders, salesPeriod);
                   const completed = filtered.filter(o => ['completed', 'bill_approved'].includes(o.status));
                   const revenue = completed.reduce((s, o) => s + parseFloat(o.total_price || 0), 0);
                   const avgOrder = completed.length ? (revenue / completed.length) : 0;
@@ -2661,7 +2741,7 @@ export default function AdminPanel({ mode = 'owner' }) {
                               filtered.slice(0, 20).map(o => (
                                 <tr key={o.id}>
                                   <td className="order-id-cell">#{String(o.id).slice(-4)}</td>
-                                  <td>Table {o.table_number}</td>
+                                  <td>Table {o.table_number ?? o.table ?? 'N/A'}</td>
                                   <td className="items-cell">{o.items}</td>
                                   <td className="total-cell">{formatPrice(o.total_price || 0)}</td>
                                   <td><span className={`status-pill status-${o.status}`}>{o.status}</span></td>
