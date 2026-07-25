@@ -84,6 +84,7 @@ Multi-tenant QR Menu SaaS. Super Admin provisions cafe branches. Owners get acti
 24. **Menu Category & Item Reordering** - Added ⬆️ / ⬇️ reordering controls in Admin Panel, automatically persisting `sort_order` sequence across admin and customer views.
 25. **Defensive Security & XSS Input Sanitization** - Implemented `sanitizeInput()` in `security.js` to escape hazardous HTML entities across order notes, table numbers, and catalog inputs.
 26. **Brute-Force Rate Limiter & 30-Min Idle Session Logout** - Enforced login/activation key rate limiting (5 attempts max, 60s lock) and automatic 30-minute inactivity auto-logout on Admin & Waiter POS dashboards.
+27. **Professional CSV & Excel Sales Export Overhaul** - Split Date & Time into two clean columns (`Date`: `YYYY-MM-DD`, `Time`: `HH:MM:SS AM/PM`), eliminated comma splitting (`#########` date error), added UTF-8 BOM (`\uFEFF`) for Excel, added executive header summary block, robust table number fallbacks, and 100% period toggle data sync (`Last 7 Days`, `This Month`, `This Year`).
 
 ---
 
