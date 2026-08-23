@@ -8144,30 +8144,63 @@ body[data-cv-theme="light"] .customer-page-root {
 
 /* Centered & Focused Wait Room Suite Styles */
 .waiting-mode-fullscreen-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  min-height: 80vh;
-  padding: 10px;
-  width: 100%;
-  box-sizing: border-box;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  background: #080d1a !important;
+  z-index: 9999 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  padding: 0 !important;
+  box-sizing: border-box !important;
+  overflow: hidden !important;
+}
+
+.mode-top-bar {
+  width: 100% !important;
+  box-sizing: border-box !important;
+  padding: 12px 18px !important;
+  background: rgba(15, 23, 42, 0.95) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  z-index: 100 !important;
 }
 
 .mode-body-wrapper {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  width: 100%;
-  flex-grow: 1;
+  display: flex !important;
+  justify-content: center !important;
+  align-items: flex-start !important;
+  width: 100% !important;
+  flex-grow: 1 !important;
+  padding: 12px 8px 30px 8px !important;
+  box-sizing: border-box !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch !important;
 }
 
 .game-suite-container {
-  width: 100%;
-  max-width: 380px !important;
-  margin: 0 auto;
-  box-sizing: border-box;
+  width: 100% !important;
+  max-width: 440px !important;
+  margin: 0 auto !important;
+  box-sizing: border-box !important;
   padding: 16px !important;
+  background: rgba(15, 23, 42, 0.88) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  border: 1.5px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 24px !important;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7) !important;
+  color: #ffffff !important;
 }
 
 .game-suite-body {
@@ -8178,45 +8211,84 @@ body[data-cv-theme="light"] .customer-page-root {
 }
 
 .game-suite-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 20;
   display: flex;
-  gap: 8px;
+  gap: 6px;
+  padding: 4px;
+  background: rgba(8, 13, 26, 0.95);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
   margin-bottom: 16px;
   width: 100%;
+  box-sizing: border-box;
 }
 
 .suite-tab-btn {
   flex: 1;
   padding: 10px 4px;
-  font-size: 0.8rem;
-  font-weight: bold;
-  border-radius: 8px;
-  border: 1px solid var(--cv-card-border, rgba(255, 255, 255, 0.08));
-  background: var(--cv-card-bg, rgba(255, 255, 255, 0.03));
-  color: var(--cv-text-primary, #fff);
+  font-size: 0.82rem;
+  font-weight: 700;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.65);
   cursor: pointer;
   white-space: nowrap;
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.suite-tab-btn:hover:not(.active) {
-  background: rgba(var(--customer-accent-rgb), 0.06);
-  border-color: rgba(var(--customer-accent-rgb), 0.3);
+.suite-tab-btn:active {
+  transform: scale(0.95);
 }
 
 .suite-tab-btn.active {
-  background: rgba(var(--customer-accent-rgb), 0.15);
-  border-color: var(--customer-accent);
-  color: var(--customer-accent);
+  background: rgba(var(--customer-accent-rgb, 0, 242, 254), 0.22) !important;
+  border: 1px solid var(--customer-accent, #00f2fe) !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 15px rgba(var(--customer-accent-rgb, 0, 242, 254), 0.25) !important;
+}
+
+/* Touch Control Buttons Active & Haptic Feedback Styling */
+.control-btn {
+  width: 52px !important;
+  height: 52px !important;
+  border-radius: 16px !important;
+  background: rgba(15, 23, 42, 0.95) !important;
+  border: 1.5px solid rgba(var(--customer-accent-rgb, 0, 242, 254), 0.4) !important;
+  color: var(--customer-accent, #00f2fe) !important;
+  font-size: 1.25rem !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5) !important;
+  transition: transform 0.08s ease, background 0.08s ease, box-shadow 0.08s ease !important;
+  touch-action: manipulation !important;
+  -webkit-tap-highlight-color: transparent !important;
+  user-select: none !important;
+}
+
+.control-btn:active {
+  transform: scale(0.88) !important;
+  background: var(--customer-accent, #00f2fe) !important;
+  color: #0b0f19 !important;
+  box-shadow: 0 0 22px var(--customer-accent, #00f2fe) !important;
 }
 
 /* Responsive adjustments to prevent squishing or clipping */
 @media (max-width: 480px) {
   .game-suite-container {
     padding: 12px !important;
+    border-radius: 18px !important;
   }
   .suite-tab-btn {
-    font-size: 0.72rem;
-    padding: 8px 2px;
+    font-size: 0.75rem;
+    padding: 9px 2px;
   }
 }
 

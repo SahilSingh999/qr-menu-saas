@@ -5,6 +5,15 @@ import { useCurrency } from '../context/CurrencyContext';
 import { getRunningTabs, formatTabConsolidatedItems } from '../utils/tableTabUtils';
 import { sanitizeInput } from '../utils/security';
 
+// Helper for touch haptic vibration feedback
+const triggerHaptic = (ms = 15) => {
+  if (typeof window !== 'undefined' && window.navigator && window.navigator.vibrate) {
+    try {
+      window.navigator.vibrate(ms);
+    } catch (e) {}
+  }
+};
+
 // Canvas-based Retro Snake Game
 const SnakeGame = ({ themeColor }) => {
   const canvasRef = useRef(null);
@@ -22,6 +31,7 @@ const SnakeGame = ({ themeColor }) => {
   const directionRef = useRef({ x: 1, y: 0 });
   const nextDirectionRef = useRef({ x: 1, y: 0 });
   const foodRef = useRef({ x: 5, y: 5 });
+  const touchStartRef = useRef({ x: 0, y: 0 });
 
   const generateFood = () => {
     let rx, ry;
@@ -36,6 +46,7 @@ const SnakeGame = ({ themeColor }) => {
   };
 
   const restartGame = () => {
+    triggerHaptic(20);
     snakeRef.current = [{ x: 10, y: 10 }];
     directionRef.current = { x: 1, y: 0 };
     nextDirectionRef.current = { x: 1, y: 0 };
@@ -51,6 +62,35 @@ const SnakeGame = ({ themeColor }) => {
     }
     if (newDir.y !== 0 && curDir.y === 0) {
       nextDirectionRef.current = newDir;
+    }
+  };
+
+  const handleTouchControl = (e, newDir) => {
+    e.preventDefault();
+    triggerHaptic(15);
+    handleDirectionChange(newDir);
+  };
+
+  const handleCanvasTouchStart = (e) => {
+    if (e.touches && e.touches.length > 0) {
+      touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    }
+  };
+
+  const handleCanvasTouchEnd = (e) => {
+    if (!e.changedTouches || e.changedTouches.length === 0) return;
+    const dx = e.changedTouches[0].clientX - touchStartRef.current.x;
+    const dy = e.changedTouches[0].clientY - touchStartRef.current.y;
+    const absDx = Math.abs(dx);
+    const absDy = Math.abs(dy);
+
+    if (Math.max(absDx, absDy) > 20) {
+      triggerHaptic(15);
+      if (absDx > absDy) {
+        handleDirectionChange({ x: dx > 0 ? 1 : -1, y: 0 });
+      } else {
+        handleDirectionChange({ x: dy > 0 ? 1 : -1, y: 0 });
+      }
     }
   };
 
@@ -86,6 +126,7 @@ const SnakeGame = ({ themeColor }) => {
         head.y < 0 || head.y >= gridCount ||
         currentSnake.some(part => part.x === head.x && part.y === head.y)
       ) {
+        triggerHaptic(50);
         setGameOver(true);
         return;
       }
@@ -94,6 +135,7 @@ const SnakeGame = ({ themeColor }) => {
 
       const food = foodRef.current;
       if (head.x === food.x && head.y === food.y) {
+        triggerHaptic(20);
         setScore(prev => {
           const next = prev + 10;
           if (next > highScore) {
@@ -165,7 +207,14 @@ const SnakeGame = ({ themeColor }) => {
       </div>
 
       <div className="canvas-wrapper">
-        <canvas ref={canvasRef} width={canvasSize} height={canvasSize} className="snake-canvas"></canvas>
+        <canvas 
+          ref={canvasRef} 
+          width={canvasSize} 
+          height={canvasSize} 
+          className="snake-canvas"
+          onTouchStart={handleCanvasTouchStart}
+          onTouchEnd={handleCanvasTouchEnd}
+        ></canvas>
         {gameOver && (
           <div className="game-overlay">
             <h3>GAME OVER</h3>
@@ -177,18 +226,38 @@ const SnakeGame = ({ themeColor }) => {
 
       <div className="mobile-controls">
         <div className="control-row">
-          <button className="control-btn" aria-label="Move Up" onClick={() => handleDirectionChange({ x: 0, y: -1 })}>▲</button>
+          <button 
+            className="control-btn" 
+            aria-label="Move Up" 
+            onTouchStart={(e) => handleTouchControl(e, { x: 0, y: -1 })}
+            onClick={() => { triggerHaptic(15); handleDirectionChange({ x: 0, y: -1 }); }}
+          >▲</button>
         </div>
         <div className="control-row">
-          <button className="control-btn" aria-label="Move Left" onClick={() => handleDirectionChange({ x: -1, y: 0 })}>◀</button>
+          <button 
+            className="control-btn" 
+            aria-label="Move Left" 
+            onTouchStart={(e) => handleTouchControl(e, { x: -1, y: 0 })}
+            onClick={() => { triggerHaptic(15); handleDirectionChange({ x: -1, y: 0 }); }}
+          >◀</button>
           <button className="control-btn empty-center" aria-hidden="true"></button>
-          <button className="control-btn" aria-label="Move Right" onClick={() => handleDirectionChange({ x: 1, y: 0 })}>▶</button>
+          <button 
+            className="control-btn" 
+            aria-label="Move Right" 
+            onTouchStart={(e) => handleTouchControl(e, { x: 1, y: 0 })}
+            onClick={() => { triggerHaptic(15); handleDirectionChange({ x: 1, y: 0 }); }}
+          >▶</button>
         </div>
         <div className="control-row">
-          <button className="control-btn" aria-label="Move Down" onClick={() => handleDirectionChange({ x: 0, y: 1 })}>▼</button>
+          <button 
+            className="control-btn" 
+            aria-label="Move Down" 
+            onTouchStart={(e) => handleTouchControl(e, { x: 0, y: 1 })}
+            onClick={() => { triggerHaptic(15); handleDirectionChange({ x: 0, y: 1 }); }}
+          >▼</button>
         </div>
       </div>
-      <p className="controls-tip">Control with keyboard arrow keys or touch buttons!</p>
+      <p className="controls-tip">Swipe canvas or tap direction buttons to control!</p>
     </div>
   );
 };
@@ -517,9 +586,10 @@ const TowerBuilder = ({ themeColor }) => {
     return () => cancelAnimationFrame(animationFrameId);
   }, [gameOver]);
 
-  // Handle click on canvas or screen
+  // Handle click or touch on canvas or screen
   const handleCanvasClick = (e) => {
     e.preventDefault();
+    triggerHaptic(20);
     dropBlock();
   };
 
@@ -528,6 +598,7 @@ const TowerBuilder = ({ themeColor }) => {
     const handleKeyDown = (e) => {
       if (e.key === ' ' || e.code === 'Space') {
         e.preventDefault();
+        triggerHaptic(20);
         dropBlock();
       }
     };
@@ -550,12 +621,13 @@ const TowerBuilder = ({ themeColor }) => {
           height={canvasHeight} 
           className="tower-canvas"
           onClick={handleCanvasClick}
+          onTouchStart={handleCanvasClick}
         ></canvas>
         {gameOver && (
           <div className="game-overlay">
             <h3>TOWER TOPPLED!</h3>
             <p className="final-score">Blocks Stacked: {score}</p>
-            <button className="btn-primary" onClick={initGame}>🔄 Play Again</button>
+            <button className="btn-primary" onClick={() => { triggerHaptic(20); initGame(); }}>🔄 Play Again</button>
           </div>
         )}
       </div>
@@ -563,7 +635,8 @@ const TowerBuilder = ({ themeColor }) => {
       <div className="game-controls">
         <button 
           className="btn-drop-block" 
-          onClick={dropBlock} 
+          onClick={(e) => { e.preventDefault(); triggerHaptic(20); dropBlock(); }}
+          onTouchStart={(e) => { e.preventDefault(); triggerHaptic(20); dropBlock(); }}
           disabled={gameOver} 
           style={{ background: themeColor || '#00f2fe', color: '#0b0f19', fontWeight: 'bold' }}
         >
@@ -577,28 +650,33 @@ const TowerBuilder = ({ themeColor }) => {
 
 // Combined Game Suite Wrapper (Solo Mode)
 const GameSuite = ({ themeColor }) => {
-  const [selectedGame, setSelectedGame] = useState('tower'); // Default to the exciting new Tower Builder!
+  const [selectedGame, setSelectedGame] = useState('tower'); // Default to Tower Builder
+
+  const handleTabSwitch = (gameKey) => {
+    triggerHaptic(15);
+    setSelectedGame(gameKey);
+  };
 
   return (
     <div className="game-suite-container glass-card">
       <div className="game-suite-tabs">
         <button 
           className={`suite-tab-btn ${selectedGame === 'tower' ? 'active' : ''}`}
-          onClick={() => setSelectedGame('tower')}
+          onClick={() => handleTabSwitch('tower')}
           style={{ '--btn-accent-color': themeColor }}
         >
           🏗️ Tower Stack
         </button>
         <button 
           className={`suite-tab-btn ${selectedGame === 'snake' ? 'active' : ''}`}
-          onClick={() => setSelectedGame('snake')}
+          onClick={() => handleTabSwitch('snake')}
           style={{ '--btn-accent-color': themeColor }}
         >
           🐍 Retro Snake
         </button>
         <button 
           className={`suite-tab-btn ${selectedGame === 'memory' ? 'active' : ''}`}
-          onClick={() => setSelectedGame('memory')}
+          onClick={() => handleTabSwitch('memory')}
           style={{ '--btn-accent-color': themeColor }}
         >
           🎴 Memory Match
