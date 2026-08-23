@@ -5,33 +5,49 @@ import { useCurrency } from '../context/CurrencyContext';
 import { getRunningTabs, formatTabConsolidatedItems } from '../utils/tableTabUtils';
 import { sanitizeInput } from '../utils/security';
 
-// Cross-Platform Haptic & Tactile Click Generator (Supports iOS Safari & Android)
+// Cross-Platform Haptic & Tactile Click Generator (iOS 18 + iPhone 13 + Android)
 let audioCtxSingleton = null;
-const triggerHaptic = (ms = 15, freq = 140) => {
-  // 1. Android & Web Vibration API
+
+const unlockIosAudio = () => {
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (AudioContextClass && !audioCtxSingleton) {
+      audioCtxSingleton = new AudioContextClass();
+    }
+    if (audioCtxSingleton && audioCtxSingleton.state === 'suspended') {
+      audioCtxSingleton.resume();
+    }
+  } catch (e) {}
+};
+
+// Global iOS 18 touch gesture listeners to unlock AudioContext on first tap
+if (typeof window !== 'undefined') {
+  window.addEventListener('touchstart', unlockIosAudio, { passive: true });
+  window.addEventListener('touchend', unlockIosAudio, { passive: true });
+  window.addEventListener('click', unlockIosAudio, { passive: true });
+}
+
+const triggerHaptic = (ms = 25, freq = 160) => {
+  // 1. Android Hardware Vibration Motor (where supported by OS)
   if (typeof window !== 'undefined' && window.navigator && window.navigator.vibrate) {
     try {
       window.navigator.vibrate(ms);
     } catch (e) {}
   }
 
-  // 2. iOS Safari & WebAudio Mechanical Touch Click Synthesizer
+  // 2. iOS 18 & iPhone Taptic Speaker Pulse (Physical tactile sensation)
   try {
-    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    if (AudioContextClass) {
-      if (!audioCtxSingleton) {
-        audioCtxSingleton = new AudioContextClass();
-      }
-      if (audioCtxSingleton.state === 'suspended') {
-        audioCtxSingleton.resume();
-      }
+    unlockIosAudio();
+    if (audioCtxSingleton) {
       const osc = audioCtxSingleton.createOscillator();
       const gain = audioCtxSingleton.createGain();
+      
       osc.type = 'sine';
       osc.frequency.setValueAtTime(freq, audioCtxSingleton.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(30, audioCtxSingleton.currentTime + (ms / 1000));
+      osc.frequency.exponentialRampToValueAtTime(20, audioCtxSingleton.currentTime + (ms / 1000));
       
-      gain.gain.setValueAtTime(0.12, audioCtxSingleton.currentTime);
+      // High initial gain for crisp tactile pop on iPhone
+      gain.gain.setValueAtTime(0.35, audioCtxSingleton.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, audioCtxSingleton.currentTime + (ms / 1000));
       
       osc.connect(gain);
@@ -97,7 +113,7 @@ const SnakeGame = ({ themeColor, onSwitchGame }) => {
   };
 
   const handleTouchControl = (e, newDir) => {
-    e.preventDefault();
+    if (e) { e.preventDefault(); e.stopPropagation(); }
     triggerHaptic(15, 160);
     handleDirectionChange(newDir);
   };
@@ -258,8 +274,7 @@ const SnakeGame = ({ themeColor, onSwitchGame }) => {
       {onSwitchGame && (
         <button 
           className="btn-change-game-cta"
-          onClick={() => { triggerHaptic(15, 180); onSwitchGame(); }}
-          onTouchStart={(e) => { e.preventDefault(); triggerHaptic(15, 180); onSwitchGame(); }}
+          onClick={(e) => { e.stopPropagation(); triggerHaptic(15, 180); onSwitchGame(); }}
         >
           🎮 Switch Game
         </button>
@@ -271,7 +286,7 @@ const SnakeGame = ({ themeColor, onSwitchGame }) => {
             className="control-btn" 
             aria-label="Move Up" 
             onTouchStart={(e) => handleTouchControl(e, { x: 0, y: -1 })}
-            onClick={() => { triggerHaptic(15, 160); handleDirectionChange({ x: 0, y: -1 }); }}
+            onClick={(e) => handleTouchControl(e, { x: 0, y: -1 })}
           >▲</button>
         </div>
         <div className="control-row">
@@ -279,14 +294,14 @@ const SnakeGame = ({ themeColor, onSwitchGame }) => {
             className="control-btn" 
             aria-label="Move Left" 
             onTouchStart={(e) => handleTouchControl(e, { x: -1, y: 0 })}
-            onClick={() => { triggerHaptic(15, 160); handleDirectionChange({ x: -1, y: 0 }); }}
+            onClick={(e) => handleTouchControl(e, { x: -1, y: 0 })}
           >◀</button>
           <button className="control-btn empty-center" aria-hidden="true"></button>
           <button 
             className="control-btn" 
             aria-label="Move Right" 
             onTouchStart={(e) => handleTouchControl(e, { x: 1, y: 0 })}
-            onClick={() => { triggerHaptic(15, 160); handleDirectionChange({ x: 1, y: 0 }); }}
+            onClick={(e) => handleTouchControl(e, { x: 1, y: 0 })}
           >▶</button>
         </div>
         <div className="control-row">
@@ -294,7 +309,7 @@ const SnakeGame = ({ themeColor, onSwitchGame }) => {
             className="control-btn" 
             aria-label="Move Down" 
             onTouchStart={(e) => handleTouchControl(e, { x: 0, y: 1 })}
-            onClick={() => { triggerHaptic(15, 160); handleDirectionChange({ x: 0, y: 1 }); }}
+            onClick={(e) => handleTouchControl(e, { x: 0, y: 1 })}
           >▼</button>
         </div>
       </div>
@@ -329,7 +344,8 @@ const MemoryMatch = ({ themeColor, onSwitchGame }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleCardClick = (idx) => {
+  const handleCardClick = (idx, e) => {
+    if (e) { e.preventDefault(); e.stopPropagation(); }
     if (win || cards[idx].isFlipped || cards[idx].isMatched || flippedIndices.length >= 2) return;
     triggerHaptic(15, 200);
 
@@ -384,8 +400,7 @@ const MemoryMatch = ({ themeColor, onSwitchGame }) => {
             <button
               key={card.id}
               className={`memory-card ${card.isFlipped || card.isMatched ? 'flipped' : ''} ${card.isMatched ? 'matched' : ''}`}
-              onClick={() => handleCardClick(idx)}
-              onTouchStart={() => handleCardClick(idx)}
+              onClick={(e) => handleCardClick(idx, e)}
               style={{ '--card-accent': themeColor || '#00f2fe' }}
             >
               <div className="card-inner">
@@ -412,8 +427,7 @@ const MemoryMatch = ({ themeColor, onSwitchGame }) => {
       {onSwitchGame && (
         <button 
           className="btn-change-game-cta"
-          onClick={() => { triggerHaptic(15, 180); onSwitchGame(); }}
-          onTouchStart={(e) => { e.preventDefault(); triggerHaptic(15, 180); onSwitchGame(); }}
+          onClick={(e) => { e.stopPropagation(); triggerHaptic(15, 180); onSwitchGame(); }}
         >
           🎮 Switch Game
         </button>
@@ -438,7 +452,7 @@ const TowerBuilder = ({ themeColor, onSwitchGame }) => {
   const currentBlockRef = useRef({ x: 0, width: 150, speed: 2.5, dir: 1, y: 0 });
   const cameraYRef = useRef(0);
   const activeCameraYRef = useRef(0);
-  const lastDropTimeRef = useRef(0);
+  const dropLockRef = useRef(false);
 
   const initGame = () => {
     blocksRef.current = [
@@ -453,22 +467,26 @@ const TowerBuilder = ({ themeColor, onSwitchGame }) => {
     };
     cameraYRef.current = 0;
     activeCameraYRef.current = 0;
-    lastDropTimeRef.current = 0;
+    dropLockRef.current = false;
     setScore(0);
     setGameOver(false);
   };
 
-  const dropBlock = () => {
+  const dropBlock = (e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     if (gameOver) return;
 
-    // Debounce guard: 1 tap = EXACTLY 1 drop (blocks duplicate touch+click event triggers within 250ms)
-    const now = Date.now();
-    if (now - lastDropTimeRef.current < 250) {
-      return;
-    }
-    lastDropTimeRef.current = now;
+    // Strict Lock: Ignore duplicate calls within 400ms (100% fixes multi-block drop bug!)
+    if (dropLockRef.current) return;
+    dropLockRef.current = true;
+    setTimeout(() => {
+      dropLockRef.current = false;
+    }, 400);
 
-    triggerHaptic(20, 200);
+    triggerHaptic(25, 220);
 
     const blocks = blocksRef.current;
     const currentBlock = currentBlockRef.current;
@@ -478,13 +496,13 @@ const TowerBuilder = ({ themeColor, onSwitchGame }) => {
     let alignedX = currentBlock.x;
     let alignedWidth = currentBlock.width - Math.abs(diff);
 
-    if (Math.abs(diff) < 5) {
+    if (Math.abs(diff) < 6) {
       alignedX = targetBlock.x;
       alignedWidth = currentBlock.width;
     }
 
     if (alignedWidth <= 0) {
-      triggerHaptic(50, 90);
+      triggerHaptic(60, 80);
       setGameOver(true);
       return;
     }
