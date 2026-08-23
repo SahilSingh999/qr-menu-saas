@@ -8229,10 +8229,12 @@ body[data-cv-theme="light"] .customer-page-root {
 }
 
 .selector-title {
-  margin: 0 0 14px 0;
-  font-size: 0.95rem;
-  color: #cbd5e1;
-  text-align: center;
+  margin: 0 0 14px 0 !important;
+  font-size: 1rem !important;
+  font-weight: 800 !important;
+  color: #ffffff !important;
+  text-shadow: 0 0 10px rgba(0, 242, 254, 0.5) !important;
+  text-align: center !important;
 }
 
 .game-selector-options-list {
@@ -8282,35 +8284,35 @@ body[data-cv-theme="light"] .customer-page-root {
   color: #94a3b8;
 }
 
-/* Below Canvas Switch Game CTA Button */
+/* Below Canvas Switch Game CTA Button (High Contrast Solid Card) */
 .btn-change-game-cta {
-  width: 100%;
-  max-width: 220px;
-  margin: 12px auto 8px auto;
-  padding: 10px 16px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 14px;
-  color: #ffffff;
-  font-weight: 700;
-  font-size: 0.88rem;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  width: 100% !important;
+  max-width: 220px !important;
+  margin: 14px auto 8px auto !important;
+  padding: 11px 18px !important;
+  background: #0f172a !important;
+  border: 1.5px solid var(--customer-accent, #00f2fe) !important;
+  border-radius: 14px !important;
+  color: #ffffff !important;
+  font-weight: 800 !important;
+  font-size: 0.9rem !important;
+  letter-spacing: 0.3px !important;
+  cursor: pointer !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+  touch-action: manipulation !important;
+  -webkit-tap-highlight-color: transparent !important;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4) !important;
 }
 
 .btn-change-game-cta:active {
-  background: rgba(var(--customer-accent-rgb, 0, 242, 254), 0.25);
-  border-color: var(--customer-accent, #00f2fe);
-  color: #ffffff;
-  transform: scale(0.94);
-  box-shadow: 0 0 15px rgba(var(--customer-accent-rgb, 0, 242, 254), 0.3);
+  background: var(--customer-accent, #00f2fe) !important;
+  color: #0b0f19 !important;
+  transform: scale(0.95) !important;
+  box-shadow: 0 0 18px var(--customer-accent, #00f2fe) !important;
 }
 
 /* Touch Control Buttons Active & Haptic Feedback Styling */
