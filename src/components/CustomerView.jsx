@@ -438,6 +438,7 @@ const TowerBuilder = ({ themeColor, onSwitchGame }) => {
   const currentBlockRef = useRef({ x: 0, width: 150, speed: 2.5, dir: 1, y: 0 });
   const cameraYRef = useRef(0);
   const activeCameraYRef = useRef(0);
+  const lastDropTimeRef = useRef(0);
 
   const initGame = () => {
     blocksRef.current = [
@@ -452,12 +453,23 @@ const TowerBuilder = ({ themeColor, onSwitchGame }) => {
     };
     cameraYRef.current = 0;
     activeCameraYRef.current = 0;
+    lastDropTimeRef.current = 0;
     setScore(0);
     setGameOver(false);
   };
 
   const dropBlock = () => {
     if (gameOver) return;
+
+    // Debounce guard: 1 tap = EXACTLY 1 drop (blocks duplicate touch+click event triggers within 250ms)
+    const now = Date.now();
+    if (now - lastDropTimeRef.current < 250) {
+      return;
+    }
+    lastDropTimeRef.current = now;
+
+    triggerHaptic(20, 200);
+
     const blocks = blocksRef.current;
     const currentBlock = currentBlockRef.current;
     const targetBlock = blocks[blocks.length - 1];
@@ -476,8 +488,6 @@ const TowerBuilder = ({ themeColor, onSwitchGame }) => {
       setGameOver(true);
       return;
     }
-
-    triggerHaptic(15, 200);
 
     const newBlockColor = `hsl(${(blocks.length * 20) % 360}, 85%, 60%)`;
     const placedBlock = {
@@ -653,7 +663,6 @@ const TowerBuilder = ({ themeColor, onSwitchGame }) => {
           height={canvasHeight} 
           className="tower-canvas"
           onClick={handleCanvasClick}
-          onTouchStart={handleCanvasClick}
         ></canvas>
         {gameOver && (
           <div className="game-overlay">
@@ -668,7 +677,6 @@ const TowerBuilder = ({ themeColor, onSwitchGame }) => {
         <button 
           className="btn-change-game-cta"
           onClick={() => { triggerHaptic(15, 180); onSwitchGame(); }}
-          onTouchStart={(e) => { e.preventDefault(); triggerHaptic(15, 180); onSwitchGame(); }}
         >
           🎮 Switch Game
         </button>
@@ -677,10 +685,8 @@ const TowerBuilder = ({ themeColor, onSwitchGame }) => {
       <div className="game-controls">
         <button 
           className="btn-drop-block" 
-          onClick={(e) => { e.preventDefault(); dropBlock(); }}
-          onTouchStart={(e) => { e.preventDefault(); dropBlock(); }}
-          disabled={gameOver} 
-          style={{ background: themeColor || '#00f2fe', color: '#0b0f19', fontWeight: 'bold' }}
+          onClick={handleCanvasClick}
+          disabled={gameOver}
         >
           🏗️ Drop Block (or Tap Screen)
         </button>
@@ -712,7 +718,6 @@ const GameSuite = ({ themeColor }) => {
         <button 
           className="btn-open-game-selector"
           onClick={() => { triggerHaptic(15, 160); setShowSelectorDrawer(prev => !prev); }}
-          onTouchStart={(e) => { e.preventDefault(); triggerHaptic(15, 160); setShowSelectorDrawer(prev => !prev); }}
         >
           {showSelectorDrawer ? '✕ Close' : '🎮 Change Game'}
         </button>
@@ -725,7 +730,6 @@ const GameSuite = ({ themeColor }) => {
             <button 
               className={`selector-option-btn ${selectedGame === 'tower' ? 'active' : ''}`}
               onClick={() => handleTabSwitch('tower')}
-              onTouchStart={(e) => { e.preventDefault(); handleTabSwitch('tower'); }}
             >
               <span className="option-icon">🏗️</span>
               <div className="option-text">
@@ -736,7 +740,6 @@ const GameSuite = ({ themeColor }) => {
             <button 
               className={`selector-option-btn ${selectedGame === 'snake' ? 'active' : ''}`}
               onClick={() => handleTabSwitch('snake')}
-              onTouchStart={(e) => { e.preventDefault(); handleTabSwitch('snake'); }}
             >
               <span className="option-icon">🐍</span>
               <div className="option-text">
@@ -747,7 +750,6 @@ const GameSuite = ({ themeColor }) => {
             <button 
               className={`selector-option-btn ${selectedGame === 'memory' ? 'active' : ''}`}
               onClick={() => handleTabSwitch('memory')}
-              onTouchStart={(e) => { e.preventDefault(); handleTabSwitch('memory'); }}
             >
               <span className="option-icon">🎴</span>
               <div className="option-text">
