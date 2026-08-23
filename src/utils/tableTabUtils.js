@@ -42,7 +42,8 @@ export const getRunningTabs = (orders = [], tableMerges = []) => {
   const activeOrders = orders.filter(o => {
     if (!o) return false;
     // Exclude finished / dead states
-    if (o.status === 'completed' || o.status === 'cancelled' || o.status === 'assistance_resolved') return false;
+    const inactiveStatuses = ['completed', 'bill_approved', 'paid', 'settled', 'closed', 'cancelled', 'assistance_resolved'];
+    if (inactiveStatuses.includes(o?.status)) return false;
     return true;
   });
 

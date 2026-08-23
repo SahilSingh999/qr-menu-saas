@@ -1035,17 +1035,28 @@ export default function CustomerView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cafeId]);
 
+  // List of settled/finished order statuses that indicate a table tab is closed/completed
+  const INACTIVE_STATUSES = ['bill_approved', 'completed', 'paid', 'settled', 'closed', 'cancelled', 'assistance_resolved'];
+
   // Load order tracking state from localstorage if exists
   useEffect(() => {
     if (cafeId && resolvedTableId) {
-      const savedOrder = localStorage.getItem(`placed_order_cafe_${cafeId}_table_${resolvedTableId}`);
+      const savedOrderKey = `placed_order_cafe_${cafeId}_table_${resolvedTableId}`;
+      const savedOrder = localStorage.getItem(savedOrderKey);
       if (savedOrder) {
         try {
           const parsed = JSON.parse(savedOrder);
-          setPlacedOrder(parsed);
-          setOrderTracking(parsed);
+          if (parsed && INACTIVE_STATUSES.includes(parsed.status)) {
+            localStorage.removeItem(savedOrderKey);
+            setPlacedOrder(null);
+            setOrderTracking(null);
+          } else {
+            setPlacedOrder(parsed);
+            setOrderTracking(parsed);
+          }
         } catch (e) {
           console.error('Error loading saved order', e);
+          localStorage.removeItem(savedOrderKey);
         }
       } else {
         setPlacedOrder(null);
@@ -1064,8 +1075,16 @@ export default function CustomerView() {
           { event: 'UPDATE', schema: 'public', table: 'orders', filter: `id=eq.${placedOrder.id}` },
           (payload) => {
             console.log('Customer Order Updated Realtime:', payload.new);
-            setOrderTracking(payload.new);
-            localStorage.setItem(`placed_order_cafe_${cafeId}_table_${resolvedTableId}`, JSON.stringify(payload.new));
+            const savedOrderKey = `placed_order_cafe_${cafeId}_table_${resolvedTableId}`;
+            if (payload.new && INACTIVE_STATUSES.includes(payload.new.status)) {
+              localStorage.removeItem(savedOrderKey);
+              setPlacedOrder(null);
+              setOrderTracking(null);
+              loadTableOrders();
+            } else {
+              setOrderTracking(payload.new);
+              localStorage.setItem(savedOrderKey, JSON.stringify(payload.new));
+            }
           }
         )
         .subscribe();
@@ -1085,8 +1104,16 @@ export default function CustomerView() {
         const payload = e.data;
         if (payload.new && String(payload.new.id) === String(placedOrder.id)) {
           console.log('Customer Order Updated Mock Realtime:', payload.new);
-          setOrderTracking(payload.new);
-          localStorage.setItem(`placed_order_cafe_${cafeId}_table_${resolvedTableId}`, JSON.stringify(payload.new));
+          const savedOrderKey = `placed_order_cafe_${cafeId}_table_${resolvedTableId}`;
+          if (payload.new && INACTIVE_STATUSES.includes(payload.new.status)) {
+            localStorage.removeItem(savedOrderKey);
+            setPlacedOrder(null);
+            setOrderTracking(null);
+            loadTableOrders();
+          } else {
+            setOrderTracking(payload.new);
+            localStorage.setItem(savedOrderKey, JSON.stringify(payload.new));
+          }
         }
       };
       channel.addEventListener('message', handleMessage);
@@ -1103,10 +1130,11 @@ export default function CustomerView() {
     const targetCafeId = parseInt(cafeId);
     let allOrders = (await fetchOrders(targetCafeId)) || [];
     
-    // Merge with local storage orders history to prevent ticket loss across page refreshes / mock mode
     const historyKey = `placed_orders_history_cafe_${cafeId}_table_${resolvedTableId}`;
+    const savedOrderKey = `placed_order_cafe_${cafeId}_table_${resolvedTableId}`;
     const localHistory = JSON.parse(localStorage.getItem(historyKey) || '[]');
     
+    // Merge server orders with local storage history (server status is authoritative)
     const mergedMap = {};
     allOrders.forEach(o => { if (o && o.id) mergedMap[o.id] = o; });
     localHistory.forEach(o => { if (o && o.id && !mergedMap[o.id]) mergedMap[o.id] = o; });
@@ -1114,17 +1142,47 @@ export default function CustomerView() {
     const combinedList = Object.values(mergedMap);
     
     const activeForTable = combinedList.filter(o => {
-      if (!o) return false;
-      // Keep served/completed items in running tab until final bill is approved!
-      if (o.status === 'bill_approved' || o.status === 'cancelled' || o.status === 'assistance_resolved') return false;
+      if (!o || !o.id) return false;
+      if (INACTIVE_STATUSES.includes(o.status)) return false;
       const oTable = String(o.table_number || '').trim();
       const rTable = String(resolvedTableId).trim();
       const tTable = String(tableId || '').trim();
       return oTable === rTable || oTable === tTable || oTable === `Table ${rTable}` || oTable === `Table ${tTable}`;
     });
 
-    activeForTable.sort((a, b) => (a.id || 0) - (b.id || 0));
-    setActiveTableOrders(activeForTable);
+    // Purge inactive/completed/approved orders from local storage history
+    const activeLocalHistory = localHistory.filter(o => {
+      if (!o || !o.id) return false;
+      const current = mergedMap[o.id];
+      return current && !INACTIVE_STATUSES.includes(current.status);
+    });
+    localStorage.setItem(historyKey, JSON.stringify(activeLocalHistory));
+
+    // Check single tracked order state
+    const savedSingleStr = localStorage.getItem(savedOrderKey);
+    if (savedSingleStr) {
+      try {
+        const parsedSingle = JSON.parse(savedSingleStr);
+        const currentSingle = mergedMap[parsedSingle.id] || parsedSingle;
+        if (INACTIVE_STATUSES.includes(currentSingle.status)) {
+          localStorage.removeItem(savedOrderKey);
+          setPlacedOrder(null);
+          setOrderTracking(null);
+        }
+      } catch (e) {
+        localStorage.removeItem(savedOrderKey);
+      }
+    }
+
+    if (activeForTable.length === 0) {
+      setActiveTableOrders([]);
+      localStorage.removeItem(savedOrderKey);
+      setPlacedOrder(null);
+      setOrderTracking(null);
+    } else {
+      activeForTable.sort((a, b) => (a.id || 0) - (b.id || 0));
+      setActiveTableOrders(activeForTable);
+    }
   };
 
   useEffect(() => {
@@ -1152,7 +1210,14 @@ export default function CustomerView() {
             .eq('id', placedOrder.id)
             .single();
           if (data && !error) {
-            setOrderTracking(data);
+            if (INACTIVE_STATUSES.includes(data.status)) {
+              localStorage.removeItem(`placed_order_cafe_${cafeId}_table_${resolvedTableId}`);
+              setPlacedOrder(null);
+              setOrderTracking(null);
+              loadTableOrders();
+            } else {
+              setOrderTracking(data);
+            }
           }
         } catch (err) {
           console.warn('Silent polling error:', err);
